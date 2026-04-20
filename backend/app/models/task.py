@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -12,9 +12,24 @@ class Task(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     goal_id: Mapped[int | None] = mapped_column(ForeignKey("goals.id"), nullable=True, index=True)
+
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)
     priority: Mapped[str] = mapped_column(String(50), default="medium", nullable=False)
+
     due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    is_recurring: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    recurrence_rule: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    parent_task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
+
+    reminder_offset_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
