@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: peo_postgres
+    environment:
+      POSTGRES_DB: peo_db
+      POSTGRES_USER: peo_user
+      POSTGRES_PASSWORD: peo_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - peo_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U peo_user -d peo_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: peo_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - peo_redis_data:/data
+
+volumes:
+  peo_postgres_data:
+  peo_redis_data:
