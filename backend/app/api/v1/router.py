@@ -8,6 +8,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.orchestrator import router as orchestrator_router
 from app.api.v1.plans import router as plans_router
+from app.api.v1.study import router as study_router
 from app.api.v1.tasks import router as tasks_router
 from app.api.v1.views import router as views_router
 
@@ -22,3 +23,4 @@ api_router.include_router(approvals_router, prefix="/approvals", tags=["approval
 api_router.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(orchestrator_router, prefix="/orchestrator", tags=["orchestrator"])
+api_router.include_router(study_router, prefix="/study", tags=["study"])
