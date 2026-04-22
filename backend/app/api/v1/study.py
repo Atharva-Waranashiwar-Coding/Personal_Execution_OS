@@ -27,6 +27,7 @@ from app.schemas.study import (
 from app.schemas.study import StudyInsightResponse
 from app.services.study_focus_engine import generate_study_sessions
 from app.services.study_recovery import mark_missed_sessions_and_carry_forward, update_streak_for_completed_session
+from app.services.study_insights import get_study_insights
 
 router = APIRouter()
 
@@ -296,3 +297,11 @@ def complete_session(
     update_streak_for_completed_session(db, current_user, session)
 
     return session
+
+@router.get("/insights", response_model=StudyInsightResponse)
+def study_insights(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StudyInsightResponse:
+    payload = get_study_insights(db, current_user)
+    return StudyInsightResponse(**payload)
