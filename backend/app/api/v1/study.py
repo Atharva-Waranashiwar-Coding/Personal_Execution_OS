@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+
 from app.api.deps import get_current_user
 from app.db.deps import get_db
 from app.models.interview_track import InterviewTrack
@@ -23,6 +24,9 @@ from app.schemas.study import (
     StudyTopicResponse,
     StudyTopicUpdate,
 )
+from app.schemas.study import StudyInsightResponse
+from app.services.study_focus_engine import generate_study_sessions
+from app.services.study_recovery import mark_missed_sessions_and_carry_forward, update_streak_for_completed_session
 
 router = APIRouter()
 
@@ -223,4 +227,72 @@ def update_session(
 
     db.commit()
     db.refresh(session)
+    return session
+
+@router.post("/sessions/generate", response_model=list[StudySessionResponse], status_code=status.HTTP_201_CREATED)
+def generate_sessions(
+    energy_preference: str = "medium",
+    available_hours: int = 3,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[StudySession]:
+    sessions = generate_study_sessions(
+        db,
+        current_user,
+        energy_preference=energy_preference,
+        available_hours=available_hours,
+    )
+    return sessions
+
+
+@router.post("/sessions/recover-missed", response_model=list[StudySessionResponse], status_code=status.HTTP_201_CREATED)
+def recover_missed_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[StudySession]:
+    sessions = mark_missed_sessions_and_carry_forward(db, current_user)
+    return sessions
+
+
+@router.post("/sessions/{session_id}/complete", response_model=StudySessionResponse)
+def complete_session(
+    session_id: int,
+    actual_minutes: int = 60,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StudySession:
+    session = db.scalar(
+        select(StudySession).where(
+            StudySession.id == session_id,
+            StudySession.user_id == current_user.id,
+        )
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+
+    session.status = "completed"
+    session.actual_minutes = actual_minutes
+    db.commit()
+    db.refresh(session)
+
+    if session.topic_id:
+        topic = db.scalar(
+            select(StudyTopic).where(StudyTopic.id == session.topic_id, StudyTopic.user_id == current_user.id)
+        )
+        if topic:
+            topic.completed_minutes += actual_minutes
+
+    if session.subtopic_id:
+        subtopic = db.scalar(
+            select(StudySubtopic).where(
+                StudySubtopic.id == session.subtopic_id,
+                StudySubtopic.user_id == current_user.id,
+            )
+        )
+        if subtopic:
+            subtopic.completed_minutes += actual_minutes
+
+    db.commit()
+    update_streak_for_completed_session(db, current_user, session)
+
     return session
