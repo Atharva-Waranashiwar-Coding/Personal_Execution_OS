@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.deps import get_db
 from app.models.plan import Plan
+from app.models.plan_brief import PlanBrief
+from app.models.plan_feedback import PlanFeedback
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.analytics import AnalyticsSummaryResponse
@@ -21,6 +23,10 @@ def get_analytics_summary(
 ) -> AnalyticsSummaryResponse:
     tasks = db.scalars(select(Task).where(Task.user_id == current_user.id)).all()
     plans = db.scalars(select(Plan).where(Plan.user_id == current_user.id)).all()
+    briefs = db.scalars(select(PlanBrief).where(PlanBrief.user_id == current_user.id)).all()
+    feedback_rows = db.scalars(
+        select(PlanFeedback).where(PlanFeedback.user_id == current_user.id)
+    ).all()
 
     total_tasks = len(tasks)
     completed_tasks = sum(1 for task in tasks if task.status == "completed")
@@ -42,10 +48,20 @@ def get_analytics_summary(
     if total_plans > 0:
         plan_adherence_rate = round((adhered_plans / total_plans) * 100, 2)
 
+    useful_feedback_count = sum(1 for row in feedback_rows if row.feedback_type == "useful")
+    ignored_feedback_count = sum(1 for row in feedback_rows if row.feedback_type == "ignored")
+    unrealistic_feedback_count = sum(1 for row in feedback_rows if row.feedback_type == "unrealistic")
+    completed_feedback_count = sum(1 for row in feedback_rows if row.feedback_type == "completed")
+
     return AnalyticsSummaryResponse(
         completion_rate=completion_rate,
         overdue_count=overdue_count,
         plan_adherence_rate=plan_adherence_rate,
         total_tasks=total_tasks,
         completed_tasks=completed_tasks,
+        generated_plan_count=len(briefs),
+        useful_feedback_count=useful_feedback_count,
+        ignored_feedback_count=ignored_feedback_count,
+        unrealistic_feedback_count=unrealistic_feedback_count,
+        completed_feedback_count=completed_feedback_count,
     )
