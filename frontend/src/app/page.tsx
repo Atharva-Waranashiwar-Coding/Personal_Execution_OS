@@ -52,6 +52,16 @@ type PlanBrief = {
   items: GeneratedPlanItem[];
 };
 
+type StudyInsight = {
+  next_best_topic: string | null;
+  next_best_subtopic: string | null;
+  estimated_weekly_coverage_minutes: number;
+  pending_sessions: number;
+  missed_sessions: number;
+  current_streak_days: number;
+  longest_streak_days: number;
+};
+
 export default function Home() {
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [todayPlans, setTodayPlans] = useState<Plan[]>([]);
@@ -61,6 +71,7 @@ export default function Home() {
   const [latestBrief, setLatestBrief] = useState<PlanBrief | null>(null);
   const [error, setError] = useState("");
   const [loadingPlan, setLoadingPlan] = useState(false);
+  const [studyInsights, setStudyInsights] = useState<StudyInsight | null>(null);
 
   async function loadDashboard() {
     try {
@@ -69,6 +80,7 @@ export default function Home() {
       const pendingApprovals = await apiFetch("/approvals/pending");
       const analyticsSummary = await apiFetch("/analytics/summary");
       const briefs = await apiFetch("/orchestrator/briefs");
+      const studyInsightsData = await apiFetch("/study/insights");
 
       setTodayTasks(today.tasks || []);
       setTodayPlans(today.plans || []);
@@ -76,6 +88,7 @@ export default function Home() {
       setApprovals(pendingApprovals || []);
       setAnalytics(analyticsSummary);
       setLatestBrief((briefs || []).length > 0 ? briefs[0] : null);
+      setStudyInsights(studyInsightsData);
       setError("");
     } catch {
       setError("Could not load dashboard. Login first.");
@@ -166,6 +179,37 @@ export default function Home() {
             <p className="text-3xl font-bold">
               {analytics ? analytics.useful_feedback_count : "-"}
             </p>
+          </section>
+        </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Next Best Topic</h2>
+            <p className="text-lg font-medium">
+              {studyInsights?.next_best_topic || "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Next Best Subtopic</h2>
+            <p className="text-lg font-medium">
+              {studyInsights?.next_best_subtopic || "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Weekly Coverage</h2>
+            <p className="text-3xl font-bold">
+              {studyInsights ? studyInsights.estimated_weekly_coverage_minutes : "-"}
+            </p>
+            <p className="text-sm text-neutral-400">minutes planned</p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Study Streak</h2>
+            <p className="text-3xl font-bold">
+              {studyInsights ? studyInsights.current_streak_days : "-"}
+            </p>
+            <p className="text-sm text-neutral-400">current days</p>
           </section>
         </div>
 
