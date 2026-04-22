@@ -3,5 +3,8 @@ from app.models.approval import Approval
 from app.models.goal import Goal
 from app.models.notification_history import NotificationHistory
 from app.models.plan import Plan
+from app.models.plan_brief import PlanBrief
+from app.models.plan_feedback import PlanFeedback
+from app.models.plan_item import PlanItem
 from app.models.task import Task
 from app.models.user import User
