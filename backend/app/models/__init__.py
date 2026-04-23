@@ -2,6 +2,10 @@ from app.models.agent_run import AgentRun
 from app.models.approval import Approval
 from app.models.goal import Goal
 from app.models.interview_track import InterviewTrack
+from app.models.life_admin_capture import LifeAdminCapture
+from app.models.life_admin_item import LifeAdminItem
+from app.models.life_admin_recurrence import LifeAdminRecurrence
+from app.models.life_admin_reminder import LifeAdminReminder
 from app.models.notification_history import NotificationHistory
 from app.models.plan import Plan
 from app.models.plan_brief import PlanBrief

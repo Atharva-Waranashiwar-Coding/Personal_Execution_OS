@@ -62,6 +62,14 @@ type StudyInsight = {
   longest_streak_days: number;
 };
 
+type LifeAdminInsight = {
+  urgent_item_count: number;
+  escalated_item_count: number;
+  upcoming_bill_count: number;
+  missed_admin_count: number;
+  next_admin_item: string | null;
+};
+
 export default function Home() {
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [todayPlans, setTodayPlans] = useState<Plan[]>([]);
@@ -72,6 +80,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [studyInsights, setStudyInsights] = useState<StudyInsight | null>(null);
+  const [lifeAdminInsights, setLifeAdminInsights] = useState<LifeAdminInsight | null>(null);
 
   async function loadDashboard() {
     try {
@@ -81,6 +90,7 @@ export default function Home() {
       const analyticsSummary = await apiFetch("/analytics/summary");
       const briefs = await apiFetch("/orchestrator/briefs");
       const studyInsightsData = await apiFetch("/study/insights");
+      const lifeAdminInsightsData = await apiFetch("/life-admin/insights");
 
       setTodayTasks(today.tasks || []);
       setTodayPlans(today.plans || []);
@@ -89,6 +99,7 @@ export default function Home() {
       setAnalytics(analyticsSummary);
       setLatestBrief((briefs || []).length > 0 ? briefs[0] : null);
       setStudyInsights(studyInsightsData);
+      setLifeAdminInsights(lifeAdminInsightsData);
       setError("");
     } catch {
       setError("Could not load dashboard. Login first.");
@@ -181,7 +192,7 @@ export default function Home() {
             </p>
           </section>
         </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           <section className="rounded-2xl border border-neutral-800 p-6">
             <h2 className="text-xl font-semibold mb-2">Next Best Topic</h2>
             <p className="text-lg font-medium">
@@ -210,6 +221,42 @@ export default function Home() {
               {studyInsights ? studyInsights.current_streak_days : "-"}
             </p>
             <p className="text-sm text-neutral-400">current days</p>
+          </section>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Urgent Admin</h2>
+            <p className="text-3xl font-bold">
+              {lifeAdminInsights ? lifeAdminInsights.urgent_item_count : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Escalated</h2>
+            <p className="text-3xl font-bold">
+              {lifeAdminInsights ? lifeAdminInsights.escalated_item_count : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Upcoming Bills</h2>
+            <p className="text-3xl font-bold">
+              {lifeAdminInsights ? lifeAdminInsights.upcoming_bill_count : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Missed Admin</h2>
+            <p className="text-3xl font-bold">
+              {lifeAdminInsights ? lifeAdminInsights.missed_admin_count : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Next Admin Item</h2>
+            <p className="text-sm font-medium">
+              {lifeAdminInsights?.next_admin_item || "-"}
+            </p>
           </section>
         </div>
 

@@ -5,6 +5,7 @@ from app.api.v1.approvals import router as approvals_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.goals import router as goals_router
 from app.api.v1.health import router as health_router
+from app.api.v1.life_admin import router as life_admin_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.orchestrator import router as orchestrator_router
 from app.api.v1.plans import router as plans_router
@@ -24,3 +25,4 @@ api_router.include_router(notifications_router, prefix="/notifications", tags=["
 api_router.include_router(analytics_router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(orchestrator_router, prefix="/orchestrator", tags=["orchestrator"])
 api_router.include_router(study_router, prefix="/study", tags=["study"])
+api_router.include_router(life_admin_router, prefix="/life-admin", tags=["life-admin"])

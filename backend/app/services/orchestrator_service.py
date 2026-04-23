@@ -11,11 +11,9 @@ from app.services.planning_engine import flatten_candidates, resolve_conflicts_a
 from app.services.agent_stubs import (
     health_routine_agent,
     job_search_agent,
-    life_admin_agent,
 )
-from app.services.context_assembler import assemble_agent_input
-from app.services.planning_engine import flatten_candidates, resolve_conflicts_and_rank
 from app.services.study_focus_agent import run_study_focus_agent
+from app.services.life_admin_agent import run_life_admin_agent
 
 
 def generate_orchestrated_plan(db: Session, user: User) -> tuple[PlanBrief, list[PlanItem]]:
@@ -25,7 +23,7 @@ def generate_orchestrated_plan(db: Session, user: User) -> tuple[PlanBrief, list
         run_study_focus_agent(db, user, agent_input),
         job_search_agent(agent_input),
         health_routine_agent(agent_input),
-        life_admin_agent(agent_input),
+        run_life_admin_agent(db, user, agent_input),
     ]
 
     candidates = flatten_candidates(outputs)
