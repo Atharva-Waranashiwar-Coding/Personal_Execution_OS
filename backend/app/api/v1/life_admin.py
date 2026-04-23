@@ -25,6 +25,8 @@ from app.schemas.life_admin import (
 from app.services.life_admin_capture import normalize_life_admin_text
 # from app.services.life_admin_insights import get_life_admin_insights
 from app.services.life_admin_recurrence import generate_recurring_life_admin_items
+from app.services.life_admin_escalation import apply_life_admin_escalation
+from app.services.life_admin_reminders import schedule_life_admin_reminders, send_due_life_admin_reminders
 
 router = APIRouter()
 
@@ -166,3 +168,29 @@ def generate_life_admin_recurrences(
 ) -> list[LifeAdminItem]:
     items = generate_recurring_life_admin_items(db, current_user.id)
     return items
+
+@router.post("/escalate", response_model=list[LifeAdminItemResponse])
+def escalate_life_admin_items(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[LifeAdminItem]:
+    items = apply_life_admin_escalation(db, current_user.id)
+    return items
+
+
+@router.post("/reminders/schedule", status_code=status.HTTP_201_CREATED)
+def schedule_admin_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    reminders = schedule_life_admin_reminders(db, current_user.id)
+    return {"created_count": len(reminders)}
+
+
+@router.post("/reminders/send", status_code=status.HTTP_200_OK)
+def send_admin_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    sent_count = send_due_life_admin_reminders(db, current_user.id)
+    return {"sent_count": sent_count}
