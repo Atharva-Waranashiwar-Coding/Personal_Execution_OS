@@ -30,8 +30,9 @@ def flatten_candidates(outputs: Iterable[AgentOutput]) -> list[CandidateItem]:
         all_items.extend(output.candidate_items)
     return all_items
 
+def resolve_conflicts_and_rank(candidates: list[CandidateItem], blocked_windows: list[tuple[datetime, datetime]] | None = None) -> list[dict]:
+    blocked_windows = blocked_windows or []
 
-def resolve_conflicts_and_rank(candidates: list[CandidateItem]) -> list[dict]:
     scored = []
     for candidate in candidates:
         scored.append(
@@ -48,6 +49,16 @@ def resolve_conflicts_and_rank(candidates: list[CandidateItem]) -> list[dict]:
     for item in scored:
         candidate = item["candidate"]
         has_conflict = False
+
+        for block_start, block_end in blocked_windows:
+            if overlaps(
+                candidate.suggested_start_at,
+                candidate.suggested_end_at,
+                block_start,
+                block_end,
+            ):
+                has_conflict = True
+                break
 
         for existing in selected:
             existing_candidate = existing["candidate"]
