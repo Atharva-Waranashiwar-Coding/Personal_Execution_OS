@@ -14,6 +14,7 @@ from app.api.v1.study import router as study_router
 from app.api.v1.tasks import router as tasks_router
 from app.api.v1.views import router as views_router
 from app.api.v1.health_routine import router as health_routine_router
+from app.api.v1.integrations import router as integrations_router
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
@@ -30,3 +31,4 @@ api_router.include_router(study_router, prefix="/study", tags=["study"])
 api_router.include_router(life_admin_router, prefix="/life-admin", tags=["life-admin"])
 api_router.include_router(job_router, prefix="/job", tags=["job"])
 api_router.include_router(health_routine_router, prefix="/health-routine", tags=["health-routine"])
+api_router.include_router(integrations_router, prefix="/integrations", tags=["integrations"])
