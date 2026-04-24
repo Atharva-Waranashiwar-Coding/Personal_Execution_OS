@@ -28,3 +28,8 @@ from app.models.health_recommendation import HealthRecommendation
 from app.models.recovery_log import RecoveryLog
 from app.models.workout_preference import WorkoutPreference
 from app.models.workout_session import WorkoutSession
+from app.models.calendar_event_snapshot import CalendarEventSnapshot
+from app.models.gmail_action_item import GmailActionItem
+from app.models.google_integration import GoogleIntegration
+from app.models.integration_sync_log import IntegrationSyncLog
+from app.models.prompt_run_log import PromptRunLog
