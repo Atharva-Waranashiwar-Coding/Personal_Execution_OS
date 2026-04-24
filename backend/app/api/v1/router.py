@@ -17,6 +17,7 @@ from app.api.v1.health_routine import router as health_routine_router
 from app.api.v1.integrations import router as integrations_router
 from app.api.v1.final_analytics import router as final_analytics_router
 from app.api.v1.demo import router as demo_router
+from app.api.v1.ai import router as ai_router
 
 api_router = APIRouter()
 api_router.include_router(health_router, tags=["health"])
@@ -36,3 +37,4 @@ api_router.include_router(health_routine_router, prefix="/health-routine", tags=
 api_router.include_router(integrations_router, prefix="/integrations", tags=["integrations"])
 api_router.include_router(final_analytics_router, prefix="/final-analytics", tags=["final-analytics"])
 api_router.include_router(demo_router, prefix="/demo", tags=["demo"])
+api_router.include_router(ai_router, prefix="/ai", tags=["ai"])
