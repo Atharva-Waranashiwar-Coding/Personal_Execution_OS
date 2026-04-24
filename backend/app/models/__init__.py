@@ -6,7 +6,7 @@ from app.models.goal import Goal
 from app.models.interview import Interview
 from app.models.interview_track import InterviewTrack
 from app.models.job_posting import JobPosting
-from app.models.job_applicatio import JobApplication
+from app.models.job_application import JobApplication
 from app.models.life_admin_capture import LifeAdminCapture
 from app.models.life_admin_item import LifeAdminItem
 from app.models.life_admin_recurrence import LifeAdminRecurrence
