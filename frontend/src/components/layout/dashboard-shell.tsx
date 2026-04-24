@@ -9,7 +9,7 @@ import { cn } from "@/lib/format";
 import { getPageMeta, navigationSections, type NavigationItem } from "@/lib/navigation";
 import { Badge, Button, Modal } from "@/components/ui";
 
-function NavigationLink({
+function NavLink({
   item,
   pathname,
   onNavigate,
@@ -27,28 +27,46 @@ function NavigationLink({
       href={item.href}
       onClick={onNavigate}
       className={cn(
-        "group flex items-start gap-3 rounded-3xl border px-4 py-3 transition duration-200",
+        "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-medium transition duration-150",
         isActive
-          ? "border-cyan-300/35 bg-cyan-300/10 text-white"
-          : "border-transparent text-slate-400 hover:border-white/8 hover:bg-white/5 hover:text-white",
+          ? "border-cyan-300/30 bg-cyan-300/10 text-white"
+          : "border-transparent text-slate-400 hover:border-white/8 hover:bg-white/5 hover:text-slate-200",
       )}
     >
-      <div
+      <span
         className={cn(
-          "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border text-xs font-semibold tracking-[0.2em]",
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[10px] font-semibold tracking-[0.15em]",
           isActive
-            ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
-            : "border-white/8 bg-white/5 text-slate-400",
+            ? "border-cyan-300/25 bg-cyan-300/10 text-cyan-200"
+            : "border-white/8 bg-white/5 text-slate-500",
         )}
       >
         {item.shortLabel}
-      </div>
-      <div className="space-y-1">
-        <div className="text-sm font-medium">{item.label}</div>
-        <div className="text-xs leading-5 text-slate-500 group-hover:text-slate-400">
-          {item.description}
-        </div>
-      </div>
+      </span>
+      {item.label}
+    </Link>
+  );
+}
+
+function SmallNavLink({ item, pathname }: { item: NavigationItem; pathname: string }) {
+  const isActive =
+    pathname === item.href ||
+    (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition duration-150",
+        isActive
+          ? "bg-white/8 text-white"
+          : "text-slate-500 hover:bg-white/5 hover:text-slate-300",
+      )}
+    >
+      <span className="w-6 shrink-0 text-center text-[10px] font-semibold tracking-widest text-slate-600">
+        {item.shortLabel}
+      </span>
+      {item.label}
     </Link>
   );
 }
@@ -57,7 +75,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const pageMeta = getPageMeta(pathname);
-  const sessionEmail = getSessionEmail();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
@@ -65,56 +82,82 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     router.replace("/login");
   };
 
+  const primarySections = navigationSections.filter(
+    (s) => s.title === "Command" || s.title === "Agents",
+  );
+  const systemSection = navigationSections.find((s) => s.title === "System");
+
   return (
     <div className="relative min-h-screen overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),_transparent_34%),radial-gradient(circle_at_top_right,_rgba(45,212,191,0.12),_transparent_26%),radial-gradient(circle_at_bottom_right,_rgba(251,191,36,0.08),_transparent_24%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.15),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(45,212,191,0.08),_transparent_24%)]" />
       <div className="relative flex min-h-screen">
-        <aside className="hidden w-[320px] shrink-0 border-r border-white/8 bg-slate-950/80 px-6 py-8 backdrop-blur-2xl lg:flex lg:flex-col">
-          <div className="mb-8 space-y-3">
-            <Badge tone="success">Deployment Ready</Badge>
-            <div className="space-y-2">
-              <h1 className="text-2xl font-semibold tracking-[-0.05em] text-white">
-                Personal Execution OS
-              </h1>
-              <p className="text-sm leading-6 text-slate-400">
-                Multi-agent operating system for execution, planning, and personal
-                logistics.
-              </p>
-            </div>
+
+        {/* ── Sidebar ── */}
+        <aside className="hidden w-[220px] shrink-0 flex-col border-r border-white/8 bg-slate-950/85 px-4 py-6 backdrop-blur-2xl lg:flex">
+          <div className="mb-6 px-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Personal
+            </p>
+            <h1 className="mt-1 text-base font-semibold tracking-[-0.04em] text-white">
+              Execution OS
+            </h1>
           </div>
 
-          <div className="flex-1 space-y-7 overflow-y-auto pr-1">
-            {navigationSections.map((section) => (
-              <div key={section.title} className="space-y-3">
-                <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+          <nav className="flex-1 space-y-5 overflow-y-auto">
+            {/* Command + Agents — full NavLink */}
+            {primarySections.map((section) => (
+              <div key={section.title}>
+                <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-600">
                   {section.title}
                 </p>
-                <div className="space-y-2">
+                <div className="space-y-0.5">
                   {section.items.map((item) => (
-                    <NavigationLink key={item.href} item={item} pathname={pathname} />
+                    <NavLink key={item.href} item={item} pathname={pathname} />
                   ))}
                 </div>
               </div>
             ))}
-          </div>
 
-          <div className="mt-8 rounded-[28px] border border-white/10 bg-white/5 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Session
+            {/* System — compact secondary links */}
+            {systemSection ? (
+              <div>
+                <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-600">
+                  {systemSection.title}
+                </p>
+                <div className="space-y-0.5">
+                  {systemSection.items.map((item) => (
+                    <SmallNavLink key={item.href} item={item} pathname={pathname} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </nav>
+
+          {/* Session footer — suppressHydrationWarning because getSessionEmail()
+              reads document.cookie which is unavailable during SSR */}
+          <div className="mt-4 border-t border-white/8 pt-4">
+            <p
+              className="truncate text-xs text-slate-500"
+              suppressHydrationWarning
+            >
+              {getSessionEmail() ?? "Authenticated"}
             </p>
-            <p className="mt-3 break-all text-sm text-slate-200">
-              {sessionEmail ?? "Authenticated user"}
-            </p>
-            <Button className="mt-4 w-full" variant="secondary" onClick={handleLogout}>
+            <Button
+              className="mt-3 w-full"
+              size="sm"
+              variant="secondary"
+              onClick={handleLogout}
+            >
               Logout
             </Button>
           </div>
         </aside>
 
+        {/* ── Main area ── */}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 border-b border-white/8 bg-slate-950/70 px-4 py-4 backdrop-blur-2xl sm:px-6 lg:px-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-3">
+          <header className="sticky top-0 z-30 border-b border-white/8 bg-slate-950/75 px-4 py-3.5 backdrop-blur-2xl sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
                 <Button
                   className="lg:hidden"
                   size="sm"
@@ -123,30 +166,28 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 >
                   Menu
                 </Button>
-                <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
-                    Operating View
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/60">
+                    {pageMeta.description}
                   </p>
-                  <div>
-                    <h2 className="text-2xl font-semibold tracking-[-0.05em] text-white">
-                      {pageMeta.label}
-                    </h2>
-                    <p className="text-sm text-slate-400">{pageMeta.description}</p>
-                  </div>
+                  <h2 className="text-xl font-semibold tracking-[-0.04em] text-white">
+                    {pageMeta.label}
+                  </h2>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="rounded-full border border-white/10 bg-white/6 px-3 py-2 text-sm text-slate-300">
+              <div className="flex items-center gap-2">
+                <span
+                  className="hidden rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-400 sm:inline"
+                  suppressHydrationWarning
+                >
                   {new Intl.DateTimeFormat("en-US", {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
                   }).format(new Date())}
-                </div>
-                <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-sm text-cyan-100/90">
-                  {sessionEmail ?? "Authenticated"}
-                </div>
+                </span>
+                <Badge tone="success">Live</Badge>
               </div>
             </div>
           </header>
@@ -155,21 +196,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
+      {/* ── Mobile menu ── */}
       <Modal
         open={mobileMenuOpen}
         title="Navigation"
-        description="Switch between execution domains and agent workspaces."
+        description="Switch between execution domains."
         onClose={() => setMobileMenuOpen(false)}
       >
-        <div className="space-y-6">
+        <div className="space-y-5">
           {navigationSections.map((section) => (
-            <div key={section.title} className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
+            <div key={section.title}>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500">
                 {section.title}
               </p>
-              <div className="space-y-2">
+              <div className="space-y-0.5">
                 {section.items.map((item) => (
-                  <NavigationLink
+                  <NavLink
                     key={item.href}
                     item={item}
                     pathname={pathname}
