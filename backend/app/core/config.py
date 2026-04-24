@@ -28,5 +28,20 @@ class Settings(BaseSettings):
 
     DEFAULT_TIMEZONE: str = "America/New_York"
 
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+    GOOGLE_REDIRECT_URI: str | None = None
+
+    GOOGLE_CALENDAR_READONLY_SCOPE: str | None = None
+    GOOGLE_CALENDAR_EVENTS_SCOPE: str | None = None
+    GMAIL_READONLY_SCOPE: str | None = None
+
+    LLM_PROVIDER: str = "openai"
+    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_INPUT_COST_PER_1K: float = 0.00015
+    LLM_OUTPUT_COST_PER_1K: float = 0.0006
+
+    DEMO_MODE: bool = False
+
 
 settings = Settings()

@@ -25,7 +25,16 @@ def generate_orchestrated_plan(db: Session, user: User) -> tuple[PlanBrief, list
     ]
 
     candidates = flatten_candidates(outputs)
-    ranked = resolve_conflicts_and_rank(candidates)
+    blocked_windows = []
+    for event in agent_input.calendar_placeholders:
+        if event.get("start_at") and event.get("end_at"):
+            blocked_windows.append(
+                (
+                    datetime.fromisoformat(event["start_at"]),
+                    datetime.fromisoformat(event["end_at"]),
+                )
+            )
+    ranked = resolve_conflicts_and_rank(candidates, blocked_windows=blocked_windows)
 
     summary = (
         f"Generated plan with {len(ranked)} prioritized items based on incomplete tasks, "
