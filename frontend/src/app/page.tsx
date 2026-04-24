@@ -90,6 +90,30 @@ type HealthInsight = {
   last_workout_type: string | null;
 };
 
+type FinalAnalytics = {
+  total_tasks: number;
+  completed_tasks: number;
+  overdue_tasks: number;
+  generated_plans: number;
+  total_plan_items: number;
+  completed_plan_items: number;
+  study_sessions_completed: number;
+  job_active_applications: number;
+  life_admin_urgent_items: number;
+  health_weekly_workouts_completed: number;
+  prompt_runs: number;
+  total_estimated_llm_cost: number;
+};
+
+type NotificationHistory = {
+  id: number;
+  notification_type: string;
+  title: string;
+  body: string | null;
+  status: string;
+  sent_at: string;
+};
+
 export default function Home() {
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [todayPlans, setTodayPlans] = useState<Plan[]>([]);
@@ -103,6 +127,8 @@ export default function Home() {
   const [lifeAdminInsights, setLifeAdminInsights] = useState<LifeAdminInsight | null>(null);
   const [jobInsights, setJobInsights] = useState<JobInsight | null>(null);
   const [healthInsights, setHealthInsights] = useState<HealthInsight | null>(null);
+  const [finalAnalytics, setFinalAnalytics] = useState<FinalAnalytics | null>(null);
+  const [notifications, setNotifications] = useState<NotificationHistory[]>([]);
 
   async function loadDashboard() {
     try {
@@ -115,6 +141,8 @@ export default function Home() {
       const lifeAdminInsightsData = await apiFetch("/life-admin/insights");
       const jobInsightsData = await apiFetch("/job/insights");
       const healthInsightsData = await apiFetch("/health-routine/insights");
+      const finalAnalyticsData = await apiFetch("/final-analytics/summary");
+      const notificationData = await apiFetch("/notifications/history");
 
       setTodayTasks(today.tasks || []);
       setTodayPlans(today.plans || []);
@@ -126,6 +154,8 @@ export default function Home() {
       setLifeAdminInsights(lifeAdminInsightsData);
       setJobInsights(jobInsightsData);
       setHealthInsights(healthInsightsData);
+      setFinalAnalytics(finalAnalyticsData);
+      setNotifications(notificationData.slice(0, 5) || []);
       setError("");
     } catch {
       setError("Could not load dashboard. Login first.");
@@ -189,6 +219,53 @@ export default function Home() {
           </div>
         ) : null}
 
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <section className="rounded-2xl border border-neutral-800 p-6 mb-6">
+            <h2 className="text-2xl font-semibold mb-4">Recent Notifications</h2>
+            <div className="space-y-3">
+              {notifications.map((notification) => (
+                <div key={notification.id} className="rounded-lg bg-neutral-900 p-3">
+                  <p className="font-medium">{notification.title}</p>
+                  <p className="text-sm text-neutral-400">
+                    {notification.notification_type} · {notification.status}
+                  </p>
+                </div>
+              ))}
+              {notifications.length === 0 ? (
+                <p className="text-neutral-400">No notifications yet.</p>
+              ) : null}
+            </div>
+          </section>
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Tasks Completed</h2>
+            <p className="text-3xl font-bold">
+              {finalAnalytics
+                ? `${finalAnalytics.completed_tasks}/${finalAnalytics.total_tasks}`
+                : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Generated Plans</h2>
+            <p className="text-3xl font-bold">
+              {finalAnalytics ? finalAnalytics.generated_plans : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">LLM Cost</h2>
+            <p className="text-3xl font-bold">
+              {finalAnalytics ? `$${finalAnalytics.total_estimated_llm_cost}` : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Overdue</h2>
+            <p className="text-3xl font-bold">
+              {finalAnalytics ? finalAnalytics.overdue_tasks : "-"}
+            </p>
+          </section>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           <section className="rounded-2xl border border-neutral-800 p-6">
             <h2 className="text-xl font-semibold mb-2">Completion Rate</h2>
