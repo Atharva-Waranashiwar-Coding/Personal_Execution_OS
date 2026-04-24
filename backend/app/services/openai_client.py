@@ -13,7 +13,6 @@ def get_openai_client() -> OpenAI:
 
 def classify_ai_command(message: str, context: dict | None = None) -> dict:
     client = get_openai_client()
-
     schema = {
         "name": "ai_command_intent",
         "schema": {
@@ -34,7 +33,7 @@ def classify_ai_command(message: str, context: dict | None = None) -> dict:
                 "confidence": {"type": "number"},
                 "extracted_payload": {
                     "type": "object",
-                    "additionalProperties": True,
+                    "additionalProperties": False,
                     "properties": {
                         "topic": {"type": ["string", "null"]},
                         "deadline": {"type": ["string", "null"]},
@@ -45,14 +44,28 @@ def classify_ai_command(message: str, context: dict | None = None) -> dict:
                         "target_role": {"type": ["string", "null"]},
                         "company": {"type": ["string", "null"]},
                     },
+                    "required": [
+                        "topic",
+                        "deadline",
+                        "goal",
+                        "timeline",
+                        "constraints",
+                        "available_time",
+                        "target_role",
+                        "company",
+                    ],
                 },
                 "assistant_message": {"type": "string"},
             },
-            "required": ["intent", "confidence", "extracted_payload", "assistant_message"],
+            "required": [
+                "intent",
+                "confidence",
+                "extracted_payload",
+                "assistant_message",
+            ],
         },
         "strict": True,
     }
-
     prompt = f"""
 You are the AI command router for Personal Execution OS.
 
