@@ -70,6 +70,17 @@ type LifeAdminInsight = {
   next_admin_item: string | null;
 };
 
+type JobInsight = {
+  active_applications: number;
+  stale_applications: number;
+  upcoming_interviews: number;
+  upcoming_deadlines: number;
+  pending_followups: number;
+  weekly_application_count: number;
+  weekly_target_count: number;
+  pipeline_health_score: number;
+};
+
 export default function Home() {
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [todayPlans, setTodayPlans] = useState<Plan[]>([]);
@@ -81,6 +92,7 @@ export default function Home() {
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [studyInsights, setStudyInsights] = useState<StudyInsight | null>(null);
   const [lifeAdminInsights, setLifeAdminInsights] = useState<LifeAdminInsight | null>(null);
+  const [jobInsights, setJobInsights] = useState<JobInsight | null>(null);
 
   async function loadDashboard() {
     try {
@@ -91,6 +103,7 @@ export default function Home() {
       const briefs = await apiFetch("/orchestrator/briefs");
       const studyInsightsData = await apiFetch("/study/insights");
       const lifeAdminInsightsData = await apiFetch("/life-admin/insights");
+      const jobInsightsData = await apiFetch("/job/insights");
 
       setTodayTasks(today.tasks || []);
       setTodayPlans(today.plans || []);
@@ -100,6 +113,7 @@ export default function Home() {
       setLatestBrief((briefs || []).length > 0 ? briefs[0] : null);
       setStudyInsights(studyInsightsData);
       setLifeAdminInsights(lifeAdminInsightsData);
+      setJobInsights(jobInsightsData);
       setError("");
     } catch {
       setError("Could not load dashboard. Login first.");
@@ -256,6 +270,60 @@ export default function Home() {
             <h2 className="text-xl font-semibold mb-2">Next Admin Item</h2>
             <p className="text-sm font-medium">
               {lifeAdminInsights?.next_admin_item || "-"}
+            </p>
+          </section>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Active Applications</h2>
+            <p className="text-3xl font-bold">
+              {jobInsights ? jobInsights.active_applications : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Stale Applications</h2>
+            <p className="text-3xl font-bold">
+              {jobInsights ? jobInsights.stale_applications : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Upcoming Interviews</h2>
+            <p className="text-3xl font-bold">
+              {jobInsights ? jobInsights.upcoming_interviews : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Pipeline Health</h2>
+            <p className="text-3xl font-bold">
+              {jobInsights ? `${jobInsights.pipeline_health_score}%` : "-"}
+            </p>
+          </section>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Pending Follow-ups</h2>
+            <p className="text-3xl font-bold">
+              {jobInsights ? jobInsights.pending_followups : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Upcoming Deadlines</h2>
+            <p className="text-3xl font-bold">
+              {jobInsights ? jobInsights.upcoming_deadlines : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Weekly Target</h2>
+            <p className="text-3xl font-bold">
+              {jobInsights
+                ? `${jobInsights.weekly_application_count}/${jobInsights.weekly_target_count}`
+                : "-"}
             </p>
           </section>
         </div>
