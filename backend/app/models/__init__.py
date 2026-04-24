@@ -33,3 +33,6 @@ from app.models.gmail_action_item import GmailActionItem
 from app.models.google_integration import GoogleIntegration
 from app.models.integration_sync_log import IntegrationSyncLog
 from app.models.prompt_run_log import PromptRunLog
+from app.models.ai_command import AICommand
+from app.models.ai_command_revision import AICommandRevision
+from app.models.ai_command_tool_call import AICommandToolCall

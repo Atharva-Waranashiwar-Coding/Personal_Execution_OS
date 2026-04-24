@@ -43,5 +43,8 @@ class Settings(BaseSettings):
 
     DEMO_MODE: bool = False
 
+    OPENAI_API_KEY: str | None = None
+    OPENAI_MODEL: str = "gpt-4.1-mini"
+    AI_COMMAND_MAX_TOOL_CALLS: int = 8
 
 settings = Settings()
