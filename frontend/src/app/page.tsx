@@ -81,6 +81,15 @@ type JobInsight = {
   pipeline_health_score: number;
 };
 
+type HealthInsight = {
+  recovery_score: number;
+  recommended_action: string;
+  weekly_workouts_completed: number;
+  weekly_workout_target: number;
+  pending_recommendations: number;
+  last_workout_type: string | null;
+};
+
 export default function Home() {
   const [todayTasks, setTodayTasks] = useState<Task[]>([]);
   const [todayPlans, setTodayPlans] = useState<Plan[]>([]);
@@ -93,6 +102,7 @@ export default function Home() {
   const [studyInsights, setStudyInsights] = useState<StudyInsight | null>(null);
   const [lifeAdminInsights, setLifeAdminInsights] = useState<LifeAdminInsight | null>(null);
   const [jobInsights, setJobInsights] = useState<JobInsight | null>(null);
+  const [healthInsights, setHealthInsights] = useState<HealthInsight | null>(null);
 
   async function loadDashboard() {
     try {
@@ -104,6 +114,7 @@ export default function Home() {
       const studyInsightsData = await apiFetch("/study/insights");
       const lifeAdminInsightsData = await apiFetch("/life-admin/insights");
       const jobInsightsData = await apiFetch("/job/insights");
+      const healthInsightsData = await apiFetch("/health-routine/insights");
 
       setTodayTasks(today.tasks || []);
       setTodayPlans(today.plans || []);
@@ -114,6 +125,7 @@ export default function Home() {
       setStudyInsights(studyInsightsData);
       setLifeAdminInsights(lifeAdminInsightsData);
       setJobInsights(jobInsightsData);
+      setHealthInsights(healthInsightsData);
       setError("");
     } catch {
       setError("Could not load dashboard. Login first.");
@@ -324,6 +336,45 @@ export default function Home() {
               {jobInsights
                 ? `${jobInsights.weekly_application_count}/${jobInsights.weekly_target_count}`
                 : "-"}
+            </p>
+          </section>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Recovery Score</h2>
+            <p className="text-3xl font-bold">
+              {healthInsights ? `${healthInsights.recovery_score}%` : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Recommended Action</h2>
+            <p className="text-sm font-medium">
+              {healthInsights?.recommended_action || "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Weekly Workouts</h2>
+            <p className="text-3xl font-bold">
+              {healthInsights
+                ? `${healthInsights.weekly_workouts_completed}/${healthInsights.weekly_workout_target}`
+                : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Health Recs</h2>
+            <p className="text-3xl font-bold">
+              {healthInsights ? healthInsights.pending_recommendations : "-"}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-neutral-800 p-6">
+            <h2 className="text-xl font-semibold mb-2">Last Workout</h2>
+            <p className="text-sm font-medium">
+              {healthInsights?.last_workout_type || "-"}
             </p>
           </section>
         </div>
