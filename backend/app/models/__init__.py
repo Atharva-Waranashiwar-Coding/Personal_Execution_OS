@@ -23,3 +23,8 @@ from app.models.study_subtopic import StudySubtopic
 from app.models.study_topic import StudyTopic
 from app.models.task import Task
 from app.models.user import User
+from app.models.health_profile import HealthProfile
+from app.models.health_recommendation import HealthRecommendation
+from app.models.recovery_log import RecoveryLog
+from app.models.workout_preference import WorkoutPreference
+from app.models.workout_session import WorkoutSession
