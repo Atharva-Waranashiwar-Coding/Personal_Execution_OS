@@ -7,6 +7,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
   useEffect,
+  useState,
 } from "react";
 
 import { cn, formatNumber } from "@/lib/format";
@@ -437,6 +438,43 @@ export function Modal({
         </div>
         {children}
       </div>
+    </div>
+  );
+}
+
+export function AdvancedSection({
+  title = "Advanced",
+  defaultOpen = false,
+  children,
+}: {
+  title?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="rounded-[28px] border border-white/8">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center justify-between px-5 py-4 text-left"
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+          {title}
+        </span>
+        <span
+          className={cn(
+            "text-slate-500 transition-transform duration-200",
+            open ? "rotate-180" : "",
+          )}
+        >
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div className="space-y-6 border-t border-white/8 px-5 pb-5 pt-4">{children}</div>
+      )}
     </div>
   );
 }
