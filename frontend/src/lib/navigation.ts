@@ -27,6 +27,12 @@ export const navigationSections: NavigationSection[] = [
         description: "Full plan briefs, ranked items, and feedback.",
         shortLabel: "OR",
       },
+      {
+        href: "/ai",
+        label: "AI Commands",
+        description: "Natural language command history.",
+        shortLabel: "AI",
+      },
     ],
   },
   {
