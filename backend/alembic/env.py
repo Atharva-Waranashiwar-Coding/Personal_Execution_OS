@@ -4,7 +4,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 from app.db.base import Base
-from app.models import AgentRun, Approval, Goal, Plan, Task, User  # noqa
+from app import models  # noqa
 from app.core.config import settings
 
 config = context.config
