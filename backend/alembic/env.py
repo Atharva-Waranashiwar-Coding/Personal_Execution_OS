@@ -8,7 +8,6 @@ from app import models  # noqa
 from app.core.config import settings
 
 config = context.config
-
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 if config.config_file_name is not None:
