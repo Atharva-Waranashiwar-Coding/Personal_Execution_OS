@@ -1,5 +1,10 @@
 import { getStoredToken } from "@/lib/auth";
 import type {
+  AICommandCreate,
+  AICommandResponse,
+  AICommandRevise,
+} from "@/types/ai";
+import type {
   AnalyticsSummaryResponse,
   Approval,
   ApprovalCreate,
@@ -592,5 +597,21 @@ export const demoApi = {
   seed: () =>
     apiFetch<DemoSeedResponse>("/demo/seed", {
       method: "POST",
+    }),
+};
+
+export const aiApi = {
+  command: (payload: AICommandCreate) =>
+    apiFetch<AICommandResponse>("/ai/command", {
+      method: "POST",
+      body: payload,
+    }),
+  listCommands: () => apiFetch<AICommandResponse[]>("/ai/commands"),
+  getCommand: (commandId: number) =>
+    apiFetch<AICommandResponse>(`/ai/commands/${commandId}`),
+  revise: (commandId: number, payload: AICommandRevise) =>
+    apiFetch<AICommandResponse>(`/ai/commands/${commandId}/revise`, {
+      method: "POST",
+      body: payload,
     }),
 };

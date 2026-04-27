@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { jobApi } from "@/lib/api";
 import { formatDateTime, formatNumber, toIsoString, toneFromStatus } from "@/lib/format";
@@ -15,11 +15,13 @@ import type {
   ResumeVariant,
 } from "@/lib/types";
 import { useApiQuery } from "@/hooks/use-api-query";
-import { Field, FormCard, KeyValueList } from "@/components/page-elements";
+import { Field, FormCard } from "@/components/page-elements";
+import { AICommandBox } from "@/components/ai/AICommandBox";
 import {
+  AdvancedSection,
   Badge,
   Button,
-  Card,
+  EmptyState,
   ErrorState,
   Input,
   LoadingState,
@@ -62,60 +64,82 @@ async function loadJobData(): Promise<JobData> {
   };
 }
 
+const JOB_EXAMPLES = [
+  "Research Google SWE L5 and add it to my pipeline.",
+  "Generate follow-ups for stale applications.",
+  "Prep talking points for my interview at Stripe tomorrow.",
+];
+
+const PIPELINE_STAGES = ["applied", "screen", "interview", "offer", "rejected"];
+
 export function JobSearchPage() {
   const { data, error, loading, reload } = useApiQuery(loadJobData);
-  const [companyForm, setCompanyForm] = useState({
-    name: "",
-    industry: "",
-    website: "",
-  });
+  const [companyForm, setCompanyForm] = useState({ name: "", industry: "", website: "" });
   const [postingForm, setPostingForm] = useState({
-    companyId: "",
-    title: "",
-    description: "",
-    location: "",
-    jobType: "",
-    postedAt: "",
-    deadlineAt: "",
+    companyId: "", title: "", description: "", location: "", jobType: "", postedAt: "", deadlineAt: "",
   });
-  const [resumeForm, setResumeForm] = useState({
-    name: "",
-    focusArea: "",
-    version: "v1",
-  });
+  const [resumeForm, setResumeForm] = useState({ name: "", focusArea: "", version: "v1" });
   const [applicationForm, setApplicationForm] = useState({
-    companyId: "",
-    postingId: "",
-    resumeId: "",
-    stage: "applied",
-    status: "active",
-    notes: "",
+    companyId: "", postingId: "", resumeId: "", stage: "applied", status: "active", notes: "",
   });
   const [interviewForm, setInterviewForm] = useState({
-    applicationId: "",
-    interviewType: "phone",
-    scheduledAt: "",
-    status: "scheduled",
-    preparationStatus: "pending",
+    applicationId: "", interviewType: "phone", scheduledAt: "", status: "scheduled", preparationStatus: "pending",
   });
   const [followUpForm, setFollowUpForm] = useState({
-    applicationId: "",
-    followUpAt: "",
-    status: "pending",
+    applicationId: "", followUpAt: "", status: "pending",
   });
   const [submitting, setSubmitting] = useState<string | null>(null);
-  const [lastWorkflowMessage, setLastWorkflowMessage] = useState<string | null>(null);
+
+  const runAction = async (name: string, action: () => Promise<void>) => {
+    setSubmitting(name);
+    try {
+      await action();
+      await reload();
+    } finally {
+      setSubmitting(null);
+    }
+  };
 
   const companies = data?.companies ?? [];
   const postings = data?.postings ?? [];
   const resumes = data?.resumes ?? [];
   const applications = data?.applications ?? [];
-  const interviews = data?.interviews ?? [];
-  const followUps = data?.followUps ?? [];
 
-  const companyLookup = new Map(companies.map((company) => [company.id, company]));
-  const postingLookup = new Map(postings.map((posting) => [posting.id, posting]));
-  const resumeLookup = new Map(resumes.map((resume) => [resume.id, resume]));
+  const companyLookup = useMemo(
+    () => new Map((data?.companies ?? []).map((c) => [c.id, c])),
+    [data?.companies],
+  );
+  const postingLookup = useMemo(
+    () => new Map((data?.postings ?? []).map((p) => [p.id, p])),
+    [data?.postings],
+  );
+
+  const upcomingInterviews = useMemo(
+    () =>
+      (data?.interviews ?? [])
+        .filter((i) => i.status === "scheduled")
+        .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+        .slice(0, 5),
+    [data?.interviews],
+  );
+
+  const pendingFollowUps = useMemo(
+    () =>
+      (data?.followUps ?? [])
+        .filter((f) => f.status === "pending")
+        .sort((a, b) => new Date(a.follow_up_at).getTime() - new Date(b.follow_up_at).getTime())
+        .slice(0, 5),
+    [data?.followUps],
+  );
+
+  const pipelineByStage = useMemo(
+    () =>
+      PIPELINE_STAGES.map((stage) => ({
+        stage,
+        apps: (data?.applications ?? []).filter((a) => a.stage === stage && a.status === "active"),
+      })).filter((s) => s.apps.length > 0),
+    [data?.applications],
+  );
 
   if (loading && !data) {
     return (
@@ -126,88 +150,191 @@ export function JobSearchPage() {
     );
   }
 
-  const runAction = async (name: string, action: () => Promise<void>) => {
-    setSubmitting(name);
-
-    try {
-      await action();
-      await reload();
-    } finally {
-      setSubmitting(null);
-    }
-  };
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <SectionHeader
         eyebrow="Job Agent"
         title="Job Search"
-        description="Manage the end-to-end job search pipeline: companies, postings, resumes, applications, interviews, follow-ups, and generated prep."
+        description="Tell the AI to research roles, generate follow-ups, and prep for interviews. Track your pipeline below."
         actions={
-          <>
-            <Button variant="secondary" onClick={() => void reload()}>
-              Refresh
-            </Button>
-            <Button
-              onClick={() =>
-                void runAction("generate-followups", async () => {
-                  const response = await jobApi.generateFollowUps();
-                  setLastWorkflowMessage(`Generated ${response.created_count} follow-up items.`);
-                })
-              }
-              disabled={submitting === "generate-followups"}
-            >
-              {submitting === "generate-followups" ? "Generating..." : "Generate Follow-Ups"}
-            </Button>
-          </>
+          <Button variant="secondary" size="sm" onClick={() => void reload()}>
+            Refresh
+          </Button>
         }
       />
 
       {error ? <ErrorState description={error} /> : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {/* AI Command */}
+      <AICommandBox
+        placeholder="Research a company and add it to my pipeline, or generate follow-ups for stale applications."
+        examples={JOB_EXAMPLES}
+        onComplete={() => void reload()}
+      />
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Active Applications"
           value={formatNumber(data?.insights?.active_applications)}
-          hint="Currently active pipeline items"
+          hint="Currently active in pipeline"
           tone="success"
         />
         <StatCard
-          label="Stale Applications"
-          value={formatNumber(data?.insights?.stale_applications)}
-          hint="Need follow-up or disposition"
-          tone="warning"
+          label="Pipeline Health"
+          value={data?.insights ? data.insights.pipeline_health_score.toFixed(1) : "—"}
+          hint={`${formatNumber(data?.insights?.weekly_application_count)} this week`}
+          tone="success"
         />
         <StatCard
           label="Upcoming Interviews"
           value={formatNumber(data?.insights?.upcoming_interviews)}
-          hint="Scheduled interview count"
+          hint="Scheduled interviews"
         />
         <StatCard
-          label="Pipeline Health"
-          value={data?.insights ? data.insights.pipeline_health_score.toFixed(1) : "0.0"}
-          hint={`${formatNumber(data?.insights?.weekly_application_count)} applications this week`}
-          tone="success"
+          label="Stale Applications"
+          value={formatNumber(data?.insights?.stale_applications)}
+          hint="Need follow-up or close"
+          tone="warning"
         />
       </div>
 
-      {lastWorkflowMessage ? (
-        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-          {lastWorkflowMessage}
-        </div>
-      ) : null}
-
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <FormCard
-          badge="Companies"
-          title="Add company"
-          description="Create a company once, then attach multiple postings and applications."
+      {/* AI actions row */}
+      <div className="flex flex-wrap gap-3">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={submitting === "generate-followups"}
+          onClick={() =>
+            void runAction("generate-followups", async () => {
+              await jobApi.generateFollowUps();
+              await reload();
+            })
+          }
         >
+          {submitting === "generate-followups" ? "Generating…" : "Generate Follow-Ups"}
+        </Button>
+      </div>
+
+      {/* Upcoming interviews */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-slate-300">Upcoming Interviews</h3>
+        {upcomingInterviews.length === 0 ? (
+          <EmptyState
+            title="No scheduled interviews"
+            description="Ask the AI to add an interview or schedule one via Advanced below."
+          />
+        ) : (
+          <div className="grid gap-3">
+            {upcomingInterviews.map((interview) => {
+              const app = applications.find((a) => a.id === interview.application_id);
+              const company = app ? companyLookup.get(app.company_id) : undefined;
+              const posting = app ? postingLookup.get(app.job_posting_id) : undefined;
+              return (
+                <div
+                  key={interview.id}
+                  className="flex items-start justify-between gap-4 rounded-2xl border border-white/8 bg-slate-950/60 px-5 py-4"
+                >
+                  <div className="space-y-1.5">
+                    <p className="font-medium text-white">
+                      {company?.name ?? "Unknown Company"}{posting ? ` — ${posting.title}` : ""}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge>{interview.interview_type}</Badge>
+                      <Badge tone={toneFromStatus(interview.preparation_status)}>
+                        prep: {interview.preparation_status}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {formatDateTime(interview.scheduled_at)}
+                    </p>
+                  </div>
+                  <Badge tone={toneFromStatus(interview.status)}>{interview.status}</Badge>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Pending follow-ups */}
+      {pendingFollowUps.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-300">Pending Follow-Ups</h3>
+          <div className="grid gap-3">
+            {pendingFollowUps.map((fu) => {
+              const app = applications.find((a) => a.id === fu.application_id);
+              const company = app ? companyLookup.get(app.company_id) : undefined;
+              return (
+                <div
+                  key={fu.id}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-white/8 bg-slate-950/60 px-5 py-3"
+                >
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-white">
+                      {company?.name ?? `Application #${fu.application_id}`}
+                    </p>
+                    <p className="text-xs text-slate-500">Due {formatDateTime(fu.follow_up_at)}</p>
+                  </div>
+                  <Badge tone={toneFromStatus(fu.status)}>{fu.status}</Badge>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Pipeline by stage */}
+      {pipelineByStage.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-300">Active Pipeline</h3>
+          <div className="grid gap-3">
+            {pipelineByStage.map(({ stage, apps }) => (
+              <div key={stage} className="rounded-2xl border border-white/8 bg-slate-950/60 px-5 py-4">
+                <div className="mb-3 flex items-center gap-3">
+                  <Badge tone={stage === "offer" ? "success" : stage === "rejected" ? "danger" : "neutral"}>
+                    {stage}
+                  </Badge>
+                  <span className="text-xs text-slate-500">{apps.length} application{apps.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div className="space-y-2">
+                  {apps.map((app) => {
+                    const company = companyLookup.get(app.company_id);
+                    const posting = postingLookup.get(app.job_posting_id);
+                    return (
+                      <div key={app.id} className="flex items-center gap-3 text-sm">
+                        <span className="font-medium text-white">
+                          {company?.name ?? "Unknown"}
+                        </span>
+                        {posting && (
+                          <span className="text-slate-500">· {posting.title}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {applications.length === 0 && upcomingInterviews.length === 0 && (
+        <EmptyState
+          title="No job search data yet"
+          description="Use the AI command above to research roles, add companies, or kick off your job search pipeline."
+        />
+      )}
+
+      {/* Advanced — manual CRUD */}
+      <AdvancedSection title="Advanced — Manual Controls">
+        {/* Add company */}
+        <FormCard badge="Companies" title="Add company" description="Create a company once, then attach postings and applications.">
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("company", async () => {
                   await jobApi.createCompany({
                     name: companyForm.name,
@@ -220,48 +347,29 @@ export function JobSearchPage() {
             }
           >
             <Field label="Company name">
-              <Input
-                value={companyForm.name}
-                onChange={(event) =>
-                  setCompanyForm({ ...companyForm, name: event.target.value })
-                }
-                required
-              />
+              <Input value={companyForm.name} onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })} required />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Industry">
-                <Input
-                  value={companyForm.industry}
-                  onChange={(event) =>
-                    setCompanyForm({ ...companyForm, industry: event.target.value })
-                  }
-                />
+                <Input value={companyForm.industry} onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })} />
               </Field>
               <Field label="Website">
-                <Input
-                  value={companyForm.website}
-                  onChange={(event) =>
-                    setCompanyForm({ ...companyForm, website: event.target.value })
-                  }
-                />
+                <Input value={companyForm.website} onChange={(e) => setCompanyForm({ ...companyForm, website: e.target.value })} />
               </Field>
             </div>
             <Button type="submit" disabled={submitting === "company"}>
-              {submitting === "company" ? "Saving..." : "Create Company"}
+              {submitting === "company" ? "Saving…" : "Create Company"}
             </Button>
           </form>
         </FormCard>
 
-        <FormCard
-          badge="Postings"
-          title="Add posting"
-          description="Persist job posting metadata and deadlines from a selected company."
-        >
+        {/* Add posting */}
+        <FormCard badge="Postings" title="Add posting" description="Attach a job posting to a company.">
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("posting", async () => {
                   await jobApi.createPosting({
                     company_id: Number(postingForm.companyId),
@@ -272,15 +380,7 @@ export function JobSearchPage() {
                     posted_at: toIsoString(postingForm.postedAt),
                     deadline_at: toIsoString(postingForm.deadlineAt),
                   });
-                  setPostingForm({
-                    companyId: "",
-                    title: "",
-                    description: "",
-                    location: "",
-                    jobType: "",
-                    postedAt: "",
-                    deadlineAt: "",
-                  });
+                  setPostingForm({ companyId: "", title: "", description: "", location: "", jobType: "", postedAt: "", deadlineAt: "" });
                 });
               })()
             }
@@ -288,145 +388,71 @@ export function JobSearchPage() {
             <Field label="Company">
               <Select
                 value={postingForm.companyId}
-                onChange={(event) =>
-                  setPostingForm({ ...postingForm, companyId: event.target.value })
-                }
+                onChange={(e) => setPostingForm({ ...postingForm, companyId: e.target.value })}
                 required
               >
                 <option value="">Select company</option>
-                {companies.map((company) => (
-                  <option key={company.id} value={company.id}>
-                    {company.name}
-                  </option>
-                ))}
+                {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             </Field>
             <Field label="Job title">
-              <Input
-                value={postingForm.title}
-                onChange={(event) =>
-                  setPostingForm({ ...postingForm, title: event.target.value })
-                }
-                required
-              />
-            </Field>
-            <Field label="Description">
-              <Textarea
-                value={postingForm.description}
-                onChange={(event) =>
-                  setPostingForm({ ...postingForm, description: event.target.value })
-                }
-              />
+              <Input value={postingForm.title} onChange={(e) => setPostingForm({ ...postingForm, title: e.target.value })} required />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Location">
-                <Input
-                  value={postingForm.location}
-                  onChange={(event) =>
-                    setPostingForm({ ...postingForm, location: event.target.value })
-                  }
-                />
+                <Input value={postingForm.location} onChange={(e) => setPostingForm({ ...postingForm, location: e.target.value })} />
               </Field>
               <Field label="Job type">
-                <Input
-                  value={postingForm.jobType}
-                  onChange={(event) =>
-                    setPostingForm({ ...postingForm, jobType: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Posted at">
-                <Input
-                  type="datetime-local"
-                  value={postingForm.postedAt}
-                  onChange={(event) =>
-                    setPostingForm({ ...postingForm, postedAt: event.target.value })
-                  }
-                />
+                <Input value={postingForm.jobType} onChange={(e) => setPostingForm({ ...postingForm, jobType: e.target.value })} />
               </Field>
               <Field label="Deadline">
-                <Input
-                  type="datetime-local"
-                  value={postingForm.deadlineAt}
-                  onChange={(event) =>
-                    setPostingForm({ ...postingForm, deadlineAt: event.target.value })
-                  }
-                />
+                <Input type="datetime-local" value={postingForm.deadlineAt} onChange={(e) => setPostingForm({ ...postingForm, deadlineAt: e.target.value })} />
               </Field>
             </div>
             <Button type="submit" disabled={submitting === "posting"}>
-              {submitting === "posting" ? "Saving..." : "Create Posting"}
+              {submitting === "posting" ? "Saving…" : "Create Posting"}
             </Button>
           </form>
         </FormCard>
-      </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <FormCard
-          badge="Resumes"
-          title="Add resume variant"
-          description="Track resume versions targeted to specific focus areas."
-        >
+        {/* Add resume variant */}
+        <FormCard badge="Resumes" title="Add resume variant" description="Track resume versions for different roles.">
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("resume", async () => {
-                  await jobApi.createResume({
-                    name: resumeForm.name,
-                    focus_area: resumeForm.focusArea,
-                    version: resumeForm.version,
-                  });
+                  await jobApi.createResume({ name: resumeForm.name, focus_area: resumeForm.focusArea, version: resumeForm.version });
                   setResumeForm({ name: "", focusArea: "", version: "v1" });
                 });
               })()
             }
           >
             <Field label="Variant name">
-              <Input
-                value={resumeForm.name}
-                onChange={(event) =>
-                  setResumeForm({ ...resumeForm, name: event.target.value })
-                }
-                required
-              />
+              <Input value={resumeForm.name} onChange={(e) => setResumeForm({ ...resumeForm, name: e.target.value })} required />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Focus area">
-                <Input
-                  value={resumeForm.focusArea}
-                  onChange={(event) =>
-                    setResumeForm({ ...resumeForm, focusArea: event.target.value })
-                  }
-                  required
-                />
+                <Input value={resumeForm.focusArea} onChange={(e) => setResumeForm({ ...resumeForm, focusArea: e.target.value })} required />
               </Field>
               <Field label="Version">
-                <Input
-                  value={resumeForm.version}
-                  onChange={(event) =>
-                    setResumeForm({ ...resumeForm, version: event.target.value })
-                  }
-                />
+                <Input value={resumeForm.version} onChange={(e) => setResumeForm({ ...resumeForm, version: e.target.value })} />
               </Field>
             </div>
             <Button type="submit" disabled={submitting === "resume"}>
-              {submitting === "resume" ? "Saving..." : "Create Resume Variant"}
+              {submitting === "resume" ? "Saving…" : "Create Resume Variant"}
             </Button>
           </form>
         </FormCard>
 
-        <FormCard
-          badge="Applications"
-          title="Add application"
-          description="Create an application tied to a company, posting, and resume variant."
-        >
+        {/* Add application */}
+        <FormCard badge="Applications" title="Add application" description="Create an application tied to a company, posting, and resume.">
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("application", async () => {
                   await jobApi.createApplication({
                     company_id: Number(applicationForm.companyId),
@@ -436,124 +462,59 @@ export function JobSearchPage() {
                     status: applicationForm.status,
                     notes: applicationForm.notes || undefined,
                   });
-                  setApplicationForm({
-                    companyId: "",
-                    postingId: "",
-                    resumeId: "",
-                    stage: "applied",
-                    status: "active",
-                    notes: "",
-                  });
+                  setApplicationForm({ companyId: "", postingId: "", resumeId: "", stage: "applied", status: "active", notes: "" });
                 });
               })()
             }
           >
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Company">
-                <Select
-                  value={applicationForm.companyId}
-                  onChange={(event) =>
-                    setApplicationForm({ ...applicationForm, companyId: event.target.value })
-                  }
-                  required
-                >
+                <Select value={applicationForm.companyId} onChange={(e) => setApplicationForm({ ...applicationForm, companyId: e.target.value })} required>
                   <option value="">Select</option>
-                  {companies.map((company) => (
-                    <option key={company.id} value={company.id}>
-                      {company.name}
-                    </option>
-                  ))}
+                  {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
               </Field>
               <Field label="Posting">
-                <Select
-                  value={applicationForm.postingId}
-                  onChange={(event) =>
-                    setApplicationForm({ ...applicationForm, postingId: event.target.value })
-                  }
-                  required
-                >
+                <Select value={applicationForm.postingId} onChange={(e) => setApplicationForm({ ...applicationForm, postingId: e.target.value })} required>
                   <option value="">Select</option>
-                  {postings.map((posting) => (
-                    <option key={posting.id} value={posting.id}>
-                      {posting.title}
-                    </option>
-                  ))}
+                  {postings.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
                 </Select>
               </Field>
               <Field label="Resume">
-                <Select
-                  value={applicationForm.resumeId}
-                  onChange={(event) =>
-                    setApplicationForm({ ...applicationForm, resumeId: event.target.value })
-                  }
-                  required
-                >
+                <Select value={applicationForm.resumeId} onChange={(e) => setApplicationForm({ ...applicationForm, resumeId: e.target.value })} required>
                   <option value="">Select</option>
-                  {resumes.map((resume) => (
-                    <option key={resume.id} value={resume.id}>
-                      {resume.name}
-                    </option>
-                  ))}
+                  {resumes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </Select>
               </Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Stage">
-                <Select
-                  value={applicationForm.stage}
-                  onChange={(event) =>
-                    setApplicationForm({ ...applicationForm, stage: event.target.value })
-                  }
-                >
-                  {["applied", "screen", "interview", "offer", "rejected"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                <Select value={applicationForm.stage} onChange={(e) => setApplicationForm({ ...applicationForm, stage: e.target.value })}>
+                  {["applied", "screen", "interview", "offer", "rejected"].map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
               </Field>
               <Field label="Status">
-                <Select
-                  value={applicationForm.status}
-                  onChange={(event) =>
-                    setApplicationForm({ ...applicationForm, status: event.target.value })
-                  }
-                >
-                  {["active", "paused", "closed"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                <Select value={applicationForm.status} onChange={(e) => setApplicationForm({ ...applicationForm, status: e.target.value })}>
+                  {["active", "paused", "closed"].map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
               </Field>
             </div>
             <Field label="Notes">
-              <Textarea
-                value={applicationForm.notes}
-                onChange={(event) =>
-                  setApplicationForm({ ...applicationForm, notes: event.target.value })
-                }
-              />
+              <Textarea value={applicationForm.notes} onChange={(e) => setApplicationForm({ ...applicationForm, notes: e.target.value })} />
             </Field>
             <Button type="submit" disabled={submitting === "application"}>
-              {submitting === "application" ? "Saving..." : "Create Application"}
+              {submitting === "application" ? "Saving…" : "Create Application"}
             </Button>
           </form>
         </FormCard>
-      </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <FormCard
-          badge="Interviews"
-          title="Add interview"
-          description="Capture interview schedule and prep status tied to an application."
-        >
+        {/* Add interview */}
+        <FormCard badge="Interviews" title="Add interview" description="Capture interview schedule and prep status.">
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("interview", async () => {
                   await jobApi.createInterview({
                     application_id: Number(interviewForm.applicationId),
@@ -562,295 +523,116 @@ export function JobSearchPage() {
                     status: interviewForm.status,
                     preparation_status: interviewForm.preparationStatus,
                   });
-                  setInterviewForm({
-                    applicationId: "",
-                    interviewType: "phone",
-                    scheduledAt: "",
-                    status: "scheduled",
-                    preparationStatus: "pending",
-                  });
+                  setInterviewForm({ applicationId: "", interviewType: "phone", scheduledAt: "", status: "scheduled", preparationStatus: "pending" });
                 });
               })()
             }
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Application">
-                <Select
-                  value={interviewForm.applicationId}
-                  onChange={(event) =>
-                    setInterviewForm({ ...interviewForm, applicationId: event.target.value })
-                  }
-                  required
-                >
+                <Select value={interviewForm.applicationId} onChange={(e) => setInterviewForm({ ...interviewForm, applicationId: e.target.value })} required>
                   <option value="">Select</option>
-                  {applications.map((application) => (
-                    <option key={application.id} value={application.id}>
-                      #{application.id} · {companyLookup.get(application.company_id)?.name ?? "Company"}
+                  {applications.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      #{a.id} · {companyLookup.get(a.company_id)?.name ?? "Company"}
                     </option>
                   ))}
                 </Select>
               </Field>
               <Field label="Interview type">
-                <Input
-                  value={interviewForm.interviewType}
-                  onChange={(event) =>
-                    setInterviewForm({ ...interviewForm, interviewType: event.target.value })
-                  }
-                />
+                <Input value={interviewForm.interviewType} onChange={(e) => setInterviewForm({ ...interviewForm, interviewType: e.target.value })} />
               </Field>
               <Field label="Scheduled at">
-                <Input
-                  type="datetime-local"
-                  value={interviewForm.scheduledAt}
-                  onChange={(event) =>
-                    setInterviewForm({ ...interviewForm, scheduledAt: event.target.value })
-                  }
-                  required
-                />
-              </Field>
-              <Field label="Status">
-                <Select
-                  value={interviewForm.status}
-                  onChange={(event) =>
-                    setInterviewForm({ ...interviewForm, status: event.target.value })
-                  }
-                >
-                  {["scheduled", "completed", "cancelled"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </Select>
+                <Input type="datetime-local" value={interviewForm.scheduledAt} onChange={(e) => setInterviewForm({ ...interviewForm, scheduledAt: e.target.value })} required />
               </Field>
               <Field label="Preparation status">
-                <Select
-                  value={interviewForm.preparationStatus}
-                  onChange={(event) =>
-                    setInterviewForm({
-                      ...interviewForm,
-                      preparationStatus: event.target.value,
-                    })
-                  }
-                >
-                  {["pending", "in_progress", "completed"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                <Select value={interviewForm.preparationStatus} onChange={(e) => setInterviewForm({ ...interviewForm, preparationStatus: e.target.value })}>
+                  {["pending", "in_progress", "completed"].map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
               </Field>
             </div>
             <Button type="submit" disabled={submitting === "interview"}>
-              {submitting === "interview" ? "Saving..." : "Create Interview"}
+              {submitting === "interview" ? "Saving…" : "Create Interview"}
             </Button>
           </form>
         </FormCard>
 
-        <FormCard
-          badge="Follow-ups"
-          title="Add follow-up"
-          description="Track outreach timing and completion status per application."
-        >
+        {/* Add follow-up */}
+        <FormCard badge="Follow-ups" title="Add follow-up" description="Schedule outreach for an application.">
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("followup", async () => {
                   await jobApi.createFollowUp({
                     application_id: Number(followUpForm.applicationId),
                     follow_up_at: toIsoString(followUpForm.followUpAt) ?? "",
                     status: followUpForm.status,
                   });
-                  setFollowUpForm({
-                    applicationId: "",
-                    followUpAt: "",
-                    status: "pending",
-                  });
+                  setFollowUpForm({ applicationId: "", followUpAt: "", status: "pending" });
                 });
               })()
             }
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Application">
-                <Select
-                  value={followUpForm.applicationId}
-                  onChange={(event) =>
-                    setFollowUpForm({ ...followUpForm, applicationId: event.target.value })
-                  }
-                  required
-                >
+                <Select value={followUpForm.applicationId} onChange={(e) => setFollowUpForm({ ...followUpForm, applicationId: e.target.value })} required>
                   <option value="">Select</option>
-                  {applications.map((application) => (
-                    <option key={application.id} value={application.id}>
-                      #{application.id} · {companyLookup.get(application.company_id)?.name ?? "Company"}
+                  {applications.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      #{a.id} · {companyLookup.get(a.company_id)?.name ?? "Company"}
                     </option>
                   ))}
                 </Select>
               </Field>
               <Field label="Status">
-                <Select
-                  value={followUpForm.status}
-                  onChange={(event) =>
-                    setFollowUpForm({ ...followUpForm, status: event.target.value })
-                  }
-                >
-                  {["pending", "sent", "completed"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                <Select value={followUpForm.status} onChange={(e) => setFollowUpForm({ ...followUpForm, status: e.target.value })}>
+                  {["pending", "sent", "completed"].map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
               </Field>
               <Field label="Follow-up at">
-                <Input
-                  type="datetime-local"
-                  value={followUpForm.followUpAt}
-                  onChange={(event) =>
-                    setFollowUpForm({ ...followUpForm, followUpAt: event.target.value })
-                  }
-                  required
-                />
+                <Input type="datetime-local" value={followUpForm.followUpAt} onChange={(e) => setFollowUpForm({ ...followUpForm, followUpAt: e.target.value })} required />
               </Field>
             </div>
             <Button type="submit" disabled={submitting === "followup"}>
-              {submitting === "followup" ? "Saving..." : "Create Follow-Up"}
+              {submitting === "followup" ? "Saving…" : "Create Follow-Up"}
             </Button>
           </form>
         </FormCard>
-      </div>
 
-      <Card className="space-y-4">
-        <div>
-          <h3 className="text-lg font-medium text-white">Pipeline Health Cards</h3>
-          <p className="text-sm text-slate-400">
-            Agent-level summary metrics returned by the job insights endpoint.
-          </p>
-        </div>
-        <KeyValueList
-          items={[
-            { label: "Pending follow-ups", value: formatNumber(data?.insights?.pending_followups) },
-            { label: "Upcoming deadlines", value: formatNumber(data?.insights?.upcoming_deadlines) },
-            { label: "Weekly applications", value: formatNumber(data?.insights?.weekly_application_count) },
-            { label: "Weekly target", value: formatNumber(data?.insights?.weekly_target_count) },
-          ]}
-        />
-      </Card>
-
-      <Table<JobApplication>
-        data={applications}
-        rowKey={(application) => application.id}
-        columns={[
-          {
-            header: "Application",
-            render: (application) => (
-              <div className="space-y-2">
-                <p className="font-medium text-white">
-                  {companyLookup.get(application.company_id)?.name ?? `Company #${application.company_id}`}
-                </p>
-                <p className="text-sm text-slate-400">
-                  {postingLookup.get(application.job_posting_id)?.title ?? `Posting #${application.job_posting_id}`}
-                </p>
-                <p className="text-xs text-slate-500">
-                  Resume {resumeLookup.get(application.resume_variant_id)?.name ?? application.resume_variant_id}
-                </p>
-              </div>
-            ),
-          },
-          {
-            header: "Meta",
-            render: (application) => (
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  <Badge tone={toneFromStatus(application.status)}>{application.status}</Badge>
-                  <Badge>{application.stage}</Badge>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Fit score {application.fit_score.toFixed(1)}
-                </p>
-              </div>
-            ),
-          },
-          {
-            header: "Timeline",
-            render: (application) => (
-              <div className="space-y-1 text-sm text-slate-300">
-                <p>Applied {formatDateTime(application.applied_at)}</p>
-                <p className="text-xs text-slate-500">
-                  Updated {formatDateTime(application.last_update_at)}
-                </p>
-              </div>
-            ),
-          },
-        ]}
-      />
-
-      <Table<Interview>
-        data={interviews}
-        rowKey={(interview) => interview.id}
-        columns={[
-          {
-            header: "Interview",
-            render: (interview) => (
-              <div className="space-y-2">
-                <p className="font-medium text-white">{interview.interview_type}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge tone={toneFromStatus(interview.status)}>{interview.status}</Badge>
-                  <Badge>{interview.preparation_status}</Badge>
-                </div>
-              </div>
-            ),
-          },
-          {
-            header: "Schedule",
-            render: (interview) => (
-              <p className="text-sm text-slate-300">{formatDateTime(interview.scheduled_at)}</p>
-            ),
-          },
-          {
-            header: "Actions",
-            render: (interview) => (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={submitting === `prep-${interview.id}`}
-                onClick={() =>
-                  void runAction(`prep-${interview.id}`, async () => {
-                    const response = await jobApi.generateInterviewPrep(interview.id);
-                    setLastWorkflowMessage(
-                      `Generated ${response.created_count} prep tasks for interview #${interview.id}.`,
-                    );
-                  })
-                }
-              >
-                {submitting === `prep-${interview.id}` ? "Generating..." : "Generate Prep Tasks"}
-              </Button>
-            ),
-          },
-        ]}
-      />
-
-      <Table<FollowUp>
-        data={followUps}
-        rowKey={(followUp) => followUp.id}
-        columns={[
-          {
-            header: "Follow-up",
-            render: (followUp) => (
-              <div className="space-y-2">
-                <p className="font-medium text-white">Application #{followUp.application_id}</p>
-                <Badge tone={toneFromStatus(followUp.status)}>{followUp.status}</Badge>
-              </div>
-            ),
-          },
-          {
-            header: "When",
-            render: (followUp) => (
-              <p className="text-sm text-slate-300">{formatDateTime(followUp.follow_up_at)}</p>
-            ),
-          },
-        ]}
-      />
+        {/* All applications table */}
+        {applications.length > 0 && (
+          <Table<JobApplication>
+            data={applications}
+            rowKey={(a) => a.id}
+            columns={[
+              {
+                header: "Application",
+                render: (a) => (
+                  <div className="space-y-1">
+                    <p className="font-medium text-white">
+                      {companyLookup.get(a.company_id)?.name ?? "Unknown Company"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {postingLookup.get(a.job_posting_id)?.title ?? "—"}
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                header: "Stage",
+                render: (a) => (
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge>{a.stage}</Badge>
+                    <Badge tone={toneFromStatus(a.status)}>{a.status}</Badge>
+                  </div>
+                ),
+              },
+            ]}
+          />
+        )}
+      </AdvancedSection>
     </div>
   );
 }

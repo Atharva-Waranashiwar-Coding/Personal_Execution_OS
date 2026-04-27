@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { analyticsApi, orchestratorApi } from "@/lib/api";
+import { AICommandBox } from "@/components/ai/AICommandBox";
 import {
   formatDateTime,
   formatNumber,
@@ -182,6 +183,16 @@ export function OrchestratorPage() {
       />
 
       {error ? <ErrorState description={error} /> : null}
+
+      <AICommandBox
+        placeholder="Generate an updated execution plan, or ask the orchestrator to re-prioritize based on my current status."
+        examples={[
+          "Generate a fresh execution plan across all agents.",
+          "What should I focus on this week given my interviews and study goals?",
+          "Re-prioritize my plan items based on deadlines.",
+        ]}
+        onComplete={() => void reload()}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Brief Count" value={formatNumber(briefs.length)} hint="Stored orchestrated briefs" />

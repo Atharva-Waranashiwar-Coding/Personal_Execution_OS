@@ -15,17 +15,18 @@ import type {
 } from "@/lib/types";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { Field, FormCard, KeyValueList } from "@/components/page-elements";
+import { AICommandBox } from "@/components/ai/AICommandBox";
 import {
+  AdvancedSection,
   Badge,
   Button,
-  Card,
+  EmptyState,
   ErrorState,
   Input,
   LoadingState,
   SectionHeader,
   Select,
   StatCard,
-  Table,
   Textarea,
 } from "@/components/ui";
 
@@ -66,6 +67,12 @@ async function loadHealthData(): Promise<HealthData> {
   };
 }
 
+const HEALTH_EXAMPLES = [
+  "Log my workout: 45 min strength training, high intensity.",
+  "I slept 7 hours, soreness level 4. Update my recovery.",
+  "Generate a workout plan for this week based on my recovery.",
+];
+
 export function HealthRoutinePage() {
   const { data, error, loading, reload } = useApiQuery(loadHealthData);
   const [profileForm, setProfileForm] = useState({
@@ -86,37 +93,33 @@ export function HealthRoutinePage() {
     isActive: "true",
   });
   const [recoveryForm, setRecoveryForm] = useState({
-    sleepHours: "",
-    sorenessLevel: "",
-    stressLevel: "",
-    hydrationLevel: "",
-    energyLevel: "",
-    notes: "",
+    sleepHours: "", sorenessLevel: "", stressLevel: "",
+    hydrationLevel: "", energyLevel: "", notes: "",
   });
   const [sessionForm, setSessionForm] = useState({
-    workoutType: "strength_training",
-    title: "",
-    scheduledStartAt: "",
-    scheduledEndAt: "",
-    plannedMinutes: "45",
-    intensity: "medium",
-    status: "planned",
-    notes: "",
+    workoutType: "strength_training", title: "", scheduledStartAt: "",
+    scheduledEndAt: "", plannedMinutes: "45", intensity: "medium",
+    status: "planned", notes: "",
   });
   const [generateForm, setGenerateForm] = useState({
-    availableMinutes: "60",
-    energyLevel: "7",
+    availableMinutes: "60", energyLevel: "7",
   });
   const [submitting, setSubmitting] = useState<string | null>(null);
 
-  const healthData = data ?? {
-    profile: null,
-    preferences: [],
-    recoveryLogs: [],
-    sessions: [],
-    recommendations: [],
-    insights: null,
+  const runAction = async (name: string, action: () => Promise<void>) => {
+    setSubmitting(name);
+    try {
+      await action();
+      await reload();
+    } finally {
+      setSubmitting(null);
+    }
   };
+
+  const healthData = data ?? {
+    profile: null, preferences: [], recoveryLogs: [], sessions: [], recommendations: [], insights: null,
+  };
+
   const currentProfileForm =
     healthData.profile && !profileDirty
       ? {
@@ -129,15 +132,30 @@ export function HealthRoutinePage() {
           notes: healthData.profile.notes ?? "",
         }
       : profileForm;
-  const updateProfileForm = (
-    updates: Partial<typeof currentProfileForm>,
-  ) => {
+
+  const updateProfileForm = (updates: Partial<typeof currentProfileForm>) => {
     setProfileDirty(true);
-    setProfileForm({
-      ...currentProfileForm,
-      ...updates,
-    });
+    setProfileForm({ ...currentProfileForm, ...updates });
   };
+
+  const profileExists = Boolean(healthData.profile);
+
+  const upcomingSessions = healthData.sessions
+    .filter((s) => s.status !== "completed")
+    .sort((a, b) => {
+      const aTime = a.scheduled_start_at ? new Date(a.scheduled_start_at).getTime() : Infinity;
+      const bTime = b.scheduled_start_at ? new Date(b.scheduled_start_at).getTime() : Infinity;
+      return aTime - bTime;
+    })
+    .slice(0, 5);
+
+  const recentRecovery = [...healthData.recoveryLogs]
+    .sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime())
+    .slice(0, 3);
+
+  const activeRecommendations = healthData.recommendations.filter(
+    (r) => r.status === "pending" || r.status === "active",
+  );
 
   if (loading && !data) {
     return (
@@ -148,50 +166,30 @@ export function HealthRoutinePage() {
     );
   }
 
-  const runAction = async (name: string, action: () => Promise<void>) => {
-    setSubmitting(name);
-
-    try {
-      await action();
-      await reload();
-    } finally {
-      setSubmitting(null);
-    }
-  };
-
-  const profileExists = Boolean(healthData.profile);
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <SectionHeader
         eyebrow="Health Agent"
         title="Health Routine"
-        description="Manage health profile, workout preferences, recovery logs, planned sessions, generated sessions, and recommendation cards."
+        description="Tell the AI to log workouts, update recovery, and generate workout plans. Track your health metrics below."
         actions={
-          <>
-            <Button variant="secondary" onClick={() => void reload()}>
-              Refresh
-            </Button>
-            <Button
-              onClick={() =>
-                void runAction("generate-session", async () => {
-                  await healthRoutineApi.generateSession({
-                    available_minutes: Number(generateForm.availableMinutes),
-                    energy_level: Number(generateForm.energyLevel),
-                  });
-                })
-              }
-              disabled={submitting === "generate-session"}
-            >
-              {submitting === "generate-session" ? "Generating..." : "Generate Workout Session"}
-            </Button>
-          </>
+          <Button variant="secondary" size="sm" onClick={() => void reload()}>
+            Refresh
+          </Button>
         }
       />
 
       {error ? <ErrorState description={error} /> : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {/* AI Command */}
+      <AICommandBox
+        placeholder="Log my workout, update recovery, or generate a plan for this week."
+        examples={HEALTH_EXAMPLES}
+        onComplete={() => void reload()}
+      />
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Recovery Score"
           value={formatNumber(healthData.insights?.recovery_score)}
@@ -199,48 +197,203 @@ export function HealthRoutinePage() {
           tone="success"
         />
         <StatCard
-          label="Workouts Completed"
+          label="Workouts This Week"
           value={formatNumber(healthData.insights?.weekly_workouts_completed)}
-          hint={`Target ${formatNumber(healthData.insights?.weekly_workout_target)}`}
+          hint={`Target: ${formatNumber(healthData.insights?.weekly_workout_target)}`}
         />
         <StatCard
           label="Recommendations"
           value={formatNumber(healthData.insights?.pending_recommendations)}
-          hint="Open health recommendations"
+          hint="Active health recommendations"
           tone="warning"
         />
         <StatCard
-          label="Last Workout Type"
-          value={healthData.insights?.last_workout_type ?? "N/A"}
+          label="Last Workout"
+          value={healthData.insights?.last_workout_type ?? "—"}
           hint="Most recent session type"
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+      {/* Generate session — stays in primary view since it's AI-powered */}
+      <div className="overflow-hidden rounded-2xl border border-emerald-400/15 bg-slate-950/60">
+        <div className="border-b border-white/6 px-5 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-400/70">
+            Generate Workout
+          </p>
+        </div>
+        <form
+          className="grid gap-4 px-5 py-4 sm:grid-cols-[1fr_1fr_auto]"
+          onSubmit={(e) =>
+            void (async () => {
+              e.preventDefault();
+              await runAction("generate-session", async () => {
+                await healthRoutineApi.generateSession({
+                  available_minutes: Number(generateForm.availableMinutes),
+                  energy_level: Number(generateForm.energyLevel),
+                });
+              });
+            })()
+          }
+        >
+          <Field label="Available minutes">
+            <Input
+              type="number"
+              value={generateForm.availableMinutes}
+              onChange={(e) => setGenerateForm({ ...generateForm, availableMinutes: e.target.value })}
+            />
+          </Field>
+          <Field label="Energy level (1–10)">
+            <Input
+              type="number"
+              min="1"
+              max="10"
+              value={generateForm.energyLevel}
+              onChange={(e) => setGenerateForm({ ...generateForm, energyLevel: e.target.value })}
+            />
+          </Field>
+          <div className="flex items-end">
+            <Button type="submit" disabled={submitting === "generate-session"}>
+              {submitting === "generate-session" ? "Generating…" : "Generate"}
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      {/* Active recommendations */}
+      {activeRecommendations.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-300">Recommendations</h3>
+          <div className="grid gap-3">
+            {activeRecommendations.map((rec) => (
+              <div
+                key={rec.id}
+                className="rounded-2xl border border-white/8 bg-slate-950/60 px-5 py-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-white">
+                      {rec.title ?? rec.recommendation_type}
+                    </p>
+                    {rec.description && (
+                      <p className="text-sm leading-6 text-slate-400">{rec.description}</p>
+                    )}
+                  </div>
+                  <Badge tone={toneFromStatus(rec.status)}>{rec.status}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upcoming sessions */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-slate-300">Upcoming Sessions</h3>
+        {upcomingSessions.length === 0 ? (
+          <EmptyState
+            title="No upcoming sessions"
+            description="Use Generate Workout above or ask the AI to plan sessions for this week."
+          />
+        ) : (
+          <div className="grid gap-3">
+            {upcomingSessions.map((session) => (
+              <div
+                key={session.id}
+                className="flex items-start justify-between gap-4 rounded-2xl border border-white/8 bg-slate-950/60 px-5 py-4"
+              >
+                <div className="space-y-1.5">
+                  <p className="font-medium text-white">{session.title}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge>{session.workout_type}</Badge>
+                    <Badge>{session.intensity}</Badge>
+                    <Badge tone={toneFromStatus(session.status)}>{session.status}</Badge>
+                  </div>
+                  {session.scheduled_start_at && (
+                    <p className="text-xs text-slate-500">
+                      {formatDateTime(session.scheduled_start_at)} · {session.planned_minutes} min
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent recovery logs */}
+      {recentRecovery.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-300">Recent Recovery</h3>
+          <div className="grid gap-3">
+            {recentRecovery.map((log) => (
+              <div
+                key={log.id}
+                className="rounded-2xl border border-white/8 bg-slate-950/60 px-5 py-3"
+              >
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+                  {log.sleep_hours != null && (
+                    <div>
+                      <p className="text-xs text-slate-500">Sleep</p>
+                      <p className="font-medium text-white">{log.sleep_hours}h</p>
+                    </div>
+                  )}
+                  {log.soreness_level != null && (
+                    <div>
+                      <p className="text-xs text-slate-500">Soreness</p>
+                      <p className="font-medium text-white">{log.soreness_level}/10</p>
+                    </div>
+                  )}
+                  {log.energy_level != null && (
+                    <div>
+                      <p className="text-xs text-slate-500">Energy</p>
+                      <p className="font-medium text-white">{log.energy_level}/10</p>
+                    </div>
+                  )}
+                  {log.stress_level != null && (
+                    <div>
+                      <p className="text-xs text-slate-500">Stress</p>
+                      <p className="font-medium text-white">{log.stress_level}/10</p>
+                    </div>
+                  )}
+                </div>
+                {log.notes && <p className="mt-2 text-xs text-slate-500">{log.notes}</p>}
+                <p className="mt-2 text-xs text-slate-600">{formatDateTime(log.logged_at)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {healthData.sessions.length === 0 && healthData.recoveryLogs.length === 0 && !healthData.profile && (
+        <EmptyState
+          title="No health data yet"
+          description="Use the AI command above to log a workout, set up your profile, or generate a weekly plan."
+        />
+      )}
+
+      {/* Advanced — manual CRUD */}
+      <AdvancedSection title="Advanced — Manual Controls">
+        {/* Profile */}
         <FormCard
           badge="Profile"
           title={profileExists ? "Update health profile" : "Create health profile"}
-          description="The backend allows a single profile per user; updates reuse the same route."
+          description="Single profile per user. Updates reuse the same endpoint."
         >
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("profile", async () => {
                   const payload = {
                     primary_goal: currentProfileForm.primaryGoal,
                     fitness_level: currentProfileForm.fitnessLevel,
-                    preferred_workout_time:
-                      currentProfileForm.preferredWorkoutTime || undefined,
+                    preferred_workout_time: currentProfileForm.preferredWorkoutTime || undefined,
                     weekly_workout_target: Number(currentProfileForm.weeklyWorkoutTarget),
-                    minimum_session_minutes: Number(
-                      currentProfileForm.minimumSessionMinutes,
-                    ),
+                    minimum_session_minutes: Number(currentProfileForm.minimumSessionMinutes),
                     ideal_session_minutes: Number(currentProfileForm.idealSessionMinutes),
                     notes: currentProfileForm.notes || undefined,
                   };
-
                   if (profileExists) {
                     await healthRoutineApi.updateProfile(payload);
                   } else {
@@ -255,359 +408,140 @@ export function HealthRoutinePage() {
               <Field label="Primary goal">
                 <Input
                   value={currentProfileForm.primaryGoal}
-                  onChange={(event) =>
-                    updateProfileForm({ primaryGoal: event.target.value })
-                  }
+                  onChange={(e) => updateProfileForm({ primaryGoal: e.target.value })}
                 />
               </Field>
               <Field label="Fitness level">
                 <Select
                   value={currentProfileForm.fitnessLevel}
-                  onChange={(event) =>
-                    updateProfileForm({ fitnessLevel: event.target.value })
-                  }
+                  onChange={(e) => updateProfileForm({ fitnessLevel: e.target.value })}
                 >
-                  {["beginner", "intermediate", "advanced"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
+                  {["beginner", "intermediate", "advanced"].map((o) => (
+                    <option key={o} value={o}>{o}</option>
                   ))}
                 </Select>
-              </Field>
-              <Field label="Preferred workout time">
-                <Input
-                  value={currentProfileForm.preferredWorkoutTime}
-                  onChange={(event) =>
-                    updateProfileForm({ preferredWorkoutTime: event.target.value })
-                  }
-                />
               </Field>
               <Field label="Weekly workout target">
                 <Input
                   type="number"
                   value={currentProfileForm.weeklyWorkoutTarget}
-                  onChange={(event) =>
-                    updateProfileForm({ weeklyWorkoutTarget: event.target.value })
-                  }
+                  onChange={(e) => updateProfileForm({ weeklyWorkoutTarget: e.target.value })}
                 />
               </Field>
-              <Field label="Minimum session minutes">
+              <Field label="Preferred time">
                 <Input
-                  type="number"
-                  value={currentProfileForm.minimumSessionMinutes}
-                  onChange={(event) =>
-                    updateProfileForm({ minimumSessionMinutes: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Ideal session minutes">
-                <Input
-                  type="number"
-                  value={currentProfileForm.idealSessionMinutes}
-                  onChange={(event) =>
-                    updateProfileForm({ idealSessionMinutes: event.target.value })
-                  }
+                  value={currentProfileForm.preferredWorkoutTime}
+                  onChange={(e) => updateProfileForm({ preferredWorkoutTime: e.target.value })}
                 />
               </Field>
             </div>
-            <Field label="Notes">
-              <Textarea
-                value={currentProfileForm.notes}
-                onChange={(event) => updateProfileForm({ notes: event.target.value })}
-              />
-            </Field>
             <Button type="submit" disabled={submitting === "profile"}>
-              {submitting === "profile"
-                ? "Saving..."
-                : profileExists
-                  ? "Update Profile"
-                  : "Create Profile"}
+              {submitting === "profile" ? "Saving…" : profileExists ? "Update Profile" : "Create Profile"}
             </Button>
           </form>
-
-          {healthData.profile ? (
+          {healthData.profile && (
             <KeyValueList
               items={[
                 { label: "Primary goal", value: healthData.profile.primary_goal },
                 { label: "Fitness level", value: healthData.profile.fitness_level },
-                {
-                  label: "Workout target",
-                  value: `${healthData.profile.weekly_workout_target} sessions`,
-                },
-                {
-                  label: "Preferred time",
-                  value: healthData.profile.preferred_workout_time ?? "Not set",
-                },
+                { label: "Workout target", value: `${healthData.profile.weekly_workout_target} sessions` },
+                { label: "Preferred time", value: healthData.profile.preferred_workout_time ?? "Not set" },
               ]}
             />
-          ) : null}
+          )}
         </FormCard>
 
-        <div className="space-y-4">
-          <FormCard
-            badge="Preferences"
-            title="Add workout preference"
-            description="Define preferred workout types, recovery gaps, and priority."
-          >
-            <form
-              className="space-y-4"
-              onSubmit={(event) =>
-                void (async () => {
-                  event.preventDefault();
-                  await runAction("preference", async () => {
-                    await healthRoutineApi.createPreference({
-                      workout_type: preferenceForm.workoutType,
-                      priority: Number(preferenceForm.priority),
-                      minimum_gap_hours: Number(preferenceForm.minimumGapHours),
-                      recovery_window_hours: Number(preferenceForm.recoveryWindowHours),
-                      is_active: preferenceForm.isActive === "true",
-                    });
-                    setPreferenceForm({
-                      workoutType: "strength_training",
-                      priority: "5",
-                      minimumGapHours: "24",
-                      recoveryWindowHours: "24",
-                      isActive: "true",
-                    });
-                  });
-                })()
-              }
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Workout type">
-                  <Input
-                    value={preferenceForm.workoutType}
-                    onChange={(event) =>
-                      setPreferenceForm({
-                        ...preferenceForm,
-                        workoutType: event.target.value,
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Priority">
-                  <Input
-                    type="number"
-                    value={preferenceForm.priority}
-                    onChange={(event) =>
-                      setPreferenceForm({
-                        ...preferenceForm,
-                        priority: event.target.value,
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Minimum gap hours">
-                  <Input
-                    type="number"
-                    value={preferenceForm.minimumGapHours}
-                    onChange={(event) =>
-                      setPreferenceForm({
-                        ...preferenceForm,
-                        minimumGapHours: event.target.value,
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Recovery window hours">
-                  <Input
-                    type="number"
-                    value={preferenceForm.recoveryWindowHours}
-                    onChange={(event) =>
-                      setPreferenceForm({
-                        ...preferenceForm,
-                        recoveryWindowHours: event.target.value,
-                      })
-                    }
-                  />
-                </Field>
-                <Field label="Active">
-                  <Select
-                    value={preferenceForm.isActive}
-                    onChange={(event) =>
-                      setPreferenceForm({
-                        ...preferenceForm,
-                        isActive: event.target.value,
-                      })
-                    }
-                  >
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
-                  </Select>
-                </Field>
-              </div>
-              <Button type="submit" disabled={submitting === "preference"}>
-                {submitting === "preference" ? "Saving..." : "Add Preference"}
-              </Button>
-            </form>
-          </FormCard>
-
-          <FormCard
-            badge="Generator"
-            title="Generate workout session"
-            description="Use available minutes and energy level to create a recommended session."
-          >
-            <form
-              className="grid gap-4 sm:grid-cols-[1fr_1fr_auto]"
-              onSubmit={(event) =>
-                void (async () => {
-                  event.preventDefault();
-                  await runAction("generate-session", async () => {
-                    await healthRoutineApi.generateSession({
-                      available_minutes: Number(generateForm.availableMinutes),
-                      energy_level: Number(generateForm.energyLevel),
-                    });
-                  });
-                })()
-              }
-            >
-              <Field label="Available minutes">
-                <Input
-                  type="number"
-                  value={generateForm.availableMinutes}
-                  onChange={(event) =>
-                    setGenerateForm({
-                      ...generateForm,
-                      availableMinutes: event.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Energy level">
-                <Input
-                  type="number"
-                  value={generateForm.energyLevel}
-                  onChange={(event) =>
-                    setGenerateForm({
-                      ...generateForm,
-                      energyLevel: event.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <div className="flex items-end">
-                <Button type="submit" disabled={submitting === "generate-session"}>
-                  {submitting === "generate-session" ? "Generating..." : "Generate"}
-                </Button>
-              </div>
-            </form>
-          </FormCard>
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-        <FormCard
-          badge="Recovery"
-          title="Log recovery"
-          description="Track recovery inputs that feed score calculation and recommendation generation."
-        >
+        {/* Workout preferences */}
+        <FormCard badge="Preferences" title="Add workout preference" description="Define preferred workout types and recovery gaps.">
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
+                await runAction("preference", async () => {
+                  await healthRoutineApi.createPreference({
+                    workout_type: preferenceForm.workoutType,
+                    priority: Number(preferenceForm.priority),
+                    minimum_gap_hours: Number(preferenceForm.minimumGapHours),
+                    recovery_window_hours: Number(preferenceForm.recoveryWindowHours),
+                    is_active: preferenceForm.isActive === "true",
+                  });
+                  setPreferenceForm({ workoutType: "strength_training", priority: "5", minimumGapHours: "24", recoveryWindowHours: "24", isActive: "true" });
+                });
+              })()
+            }
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Workout type">
+                <Input value={preferenceForm.workoutType} onChange={(e) => setPreferenceForm({ ...preferenceForm, workoutType: e.target.value })} />
+              </Field>
+              <Field label="Priority">
+                <Input type="number" value={preferenceForm.priority} onChange={(e) => setPreferenceForm({ ...preferenceForm, priority: e.target.value })} />
+              </Field>
+              <Field label="Minimum gap hours">
+                <Input type="number" value={preferenceForm.minimumGapHours} onChange={(e) => setPreferenceForm({ ...preferenceForm, minimumGapHours: e.target.value })} />
+              </Field>
+              <Field label="Recovery window hours">
+                <Input type="number" value={preferenceForm.recoveryWindowHours} onChange={(e) => setPreferenceForm({ ...preferenceForm, recoveryWindowHours: e.target.value })} />
+              </Field>
+            </div>
+            <Button type="submit" disabled={submitting === "preference"}>
+              {submitting === "preference" ? "Saving…" : "Add Preference"}
+            </Button>
+          </form>
+        </FormCard>
+
+        {/* Log recovery */}
+        <FormCard badge="Recovery" title="Log recovery" description="Track recovery inputs that feed score calculation.">
+          <form
+            className="space-y-4"
+            onSubmit={(e) =>
+              void (async () => {
+                e.preventDefault();
                 await runAction("recovery", async () => {
                   await healthRoutineApi.createRecoveryLog({
                     sleep_hours: recoveryForm.sleepHours ? Number(recoveryForm.sleepHours) : undefined,
-                    soreness_level: recoveryForm.sorenessLevel
-                      ? Number(recoveryForm.sorenessLevel)
-                      : undefined,
+                    soreness_level: recoveryForm.sorenessLevel ? Number(recoveryForm.sorenessLevel) : undefined,
                     stress_level: recoveryForm.stressLevel ? Number(recoveryForm.stressLevel) : undefined,
-                    hydration_level: recoveryForm.hydrationLevel
-                      ? Number(recoveryForm.hydrationLevel)
-                      : undefined,
+                    hydration_level: recoveryForm.hydrationLevel ? Number(recoveryForm.hydrationLevel) : undefined,
                     energy_level: recoveryForm.energyLevel ? Number(recoveryForm.energyLevel) : undefined,
                     notes: recoveryForm.notes || undefined,
                   });
-                  setRecoveryForm({
-                    sleepHours: "",
-                    sorenessLevel: "",
-                    stressLevel: "",
-                    hydrationLevel: "",
-                    energyLevel: "",
-                    notes: "",
-                  });
+                  setRecoveryForm({ sleepHours: "", sorenessLevel: "", stressLevel: "", hydrationLevel: "", energyLevel: "", notes: "" });
                 });
               })()
             }
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Sleep hours">
-                <Input
-                  type="number"
-                  value={recoveryForm.sleepHours}
-                  onChange={(event) =>
-                    setRecoveryForm({ ...recoveryForm, sleepHours: event.target.value })
-                  }
-                />
+                <Input type="number" value={recoveryForm.sleepHours} onChange={(e) => setRecoveryForm({ ...recoveryForm, sleepHours: e.target.value })} />
               </Field>
-              <Field label="Soreness level">
-                <Input
-                  type="number"
-                  value={recoveryForm.sorenessLevel}
-                  onChange={(event) =>
-                    setRecoveryForm({
-                      ...recoveryForm,
-                      sorenessLevel: event.target.value,
-                    })
-                  }
-                />
+              <Field label="Soreness (1–10)">
+                <Input type="number" value={recoveryForm.sorenessLevel} onChange={(e) => setRecoveryForm({ ...recoveryForm, sorenessLevel: e.target.value })} />
               </Field>
-              <Field label="Stress level">
-                <Input
-                  type="number"
-                  value={recoveryForm.stressLevel}
-                  onChange={(event) =>
-                    setRecoveryForm({ ...recoveryForm, stressLevel: event.target.value })
-                  }
-                />
+              <Field label="Energy (1–10)">
+                <Input type="number" value={recoveryForm.energyLevel} onChange={(e) => setRecoveryForm({ ...recoveryForm, energyLevel: e.target.value })} />
               </Field>
-              <Field label="Hydration level">
-                <Input
-                  type="number"
-                  value={recoveryForm.hydrationLevel}
-                  onChange={(event) =>
-                    setRecoveryForm({
-                      ...recoveryForm,
-                      hydrationLevel: event.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Energy level">
-                <Input
-                  type="number"
-                  value={recoveryForm.energyLevel}
-                  onChange={(event) =>
-                    setRecoveryForm({ ...recoveryForm, energyLevel: event.target.value })
-                  }
-                />
+              <Field label="Stress (1–10)">
+                <Input type="number" value={recoveryForm.stressLevel} onChange={(e) => setRecoveryForm({ ...recoveryForm, stressLevel: e.target.value })} />
               </Field>
             </div>
             <Field label="Notes">
-              <Textarea
-                value={recoveryForm.notes}
-                onChange={(event) =>
-                  setRecoveryForm({ ...recoveryForm, notes: event.target.value })
-                }
-              />
+              <Textarea value={recoveryForm.notes} onChange={(e) => setRecoveryForm({ ...recoveryForm, notes: e.target.value })} />
             </Field>
             <Button type="submit" disabled={submitting === "recovery"}>
-              {submitting === "recovery" ? "Saving..." : "Create Recovery Log"}
+              {submitting === "recovery" ? "Saving…" : "Log Recovery"}
             </Button>
           </form>
         </FormCard>
 
-        <FormCard
-          badge="Sessions"
-          title="Create workout session"
-          description="Manually schedule or log workout sessions against the routine system."
-        >
+        {/* Manual session */}
+        <FormCard badge="Sessions" title="Create session manually" description="Schedule a specific workout session.">
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("session", async () => {
                   await healthRoutineApi.createSession({
                     workout_type: sessionForm.workoutType,
@@ -620,266 +554,38 @@ export function HealthRoutinePage() {
                     notes: sessionForm.notes || undefined,
                   });
                   setSessionForm({
-                    workoutType: "strength_training",
-                    title: "",
-                    scheduledStartAt: "",
-                    scheduledEndAt: "",
-                    plannedMinutes: "45",
-                    intensity: "medium",
-                    status: "planned",
-                    notes: "",
+                    workoutType: "strength_training", title: "", scheduledStartAt: "", scheduledEndAt: "",
+                    plannedMinutes: "45", intensity: "medium", status: "planned", notes: "",
                   });
                 });
               })()
             }
           >
+            <Field label="Title">
+              <Input value={sessionForm.title} onChange={(e) => setSessionForm({ ...sessionForm, title: e.target.value })} required />
+            </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Workout type">
-                <Input
-                  value={sessionForm.workoutType}
-                  onChange={(event) =>
-                    setSessionForm({ ...sessionForm, workoutType: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="Title">
-                <Input
-                  value={sessionForm.title}
-                  onChange={(event) =>
-                    setSessionForm({ ...sessionForm, title: event.target.value })
-                  }
-                  required
-                />
-              </Field>
-              <Field label="Scheduled start">
-                <Input
-                  type="datetime-local"
-                  value={sessionForm.scheduledStartAt}
-                  onChange={(event) =>
-                    setSessionForm({
-                      ...sessionForm,
-                      scheduledStartAt: event.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Scheduled end">
-                <Input
-                  type="datetime-local"
-                  value={sessionForm.scheduledEndAt}
-                  onChange={(event) =>
-                    setSessionForm({
-                      ...sessionForm,
-                      scheduledEndAt: event.target.value,
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Planned minutes">
-                <Input
-                  type="number"
-                  value={sessionForm.plannedMinutes}
-                  onChange={(event) =>
-                    setSessionForm({
-                      ...sessionForm,
-                      plannedMinutes: event.target.value,
-                    })
-                  }
-                />
+                <Input value={sessionForm.workoutType} onChange={(e) => setSessionForm({ ...sessionForm, workoutType: e.target.value })} />
               </Field>
               <Field label="Intensity">
-                <Select
-                  value={sessionForm.intensity}
-                  onChange={(event) =>
-                    setSessionForm({ ...sessionForm, intensity: event.target.value })
-                  }
-                >
-                  {["low", "medium", "high"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                <Select value={sessionForm.intensity} onChange={(e) => setSessionForm({ ...sessionForm, intensity: e.target.value })}>
+                  {["low", "medium", "high"].map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
               </Field>
-              <Field label="Status">
-                <Select
-                  value={sessionForm.status}
-                  onChange={(event) =>
-                    setSessionForm({ ...sessionForm, status: event.target.value })
-                  }
-                >
-                  {["planned", "completed", "skipped"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </Select>
+              <Field label="Scheduled start">
+                <Input type="datetime-local" value={sessionForm.scheduledStartAt} onChange={(e) => setSessionForm({ ...sessionForm, scheduledStartAt: e.target.value })} />
+              </Field>
+              <Field label="Planned minutes">
+                <Input type="number" value={sessionForm.plannedMinutes} onChange={(e) => setSessionForm({ ...sessionForm, plannedMinutes: e.target.value })} />
               </Field>
             </div>
-            <Field label="Notes">
-              <Textarea
-                value={sessionForm.notes}
-                onChange={(event) =>
-                  setSessionForm({ ...sessionForm, notes: event.target.value })
-                }
-              />
-            </Field>
             <Button type="submit" disabled={submitting === "session"}>
-              {submitting === "session" ? "Saving..." : "Create Workout Session"}
+              {submitting === "session" ? "Creating…" : "Create Session"}
             </Button>
           </form>
         </FormCard>
-      </div>
-
-      <Table<WorkoutPreference>
-        data={healthData.preferences}
-        rowKey={(preference) => preference.id}
-        columns={[
-          {
-            header: "Preference",
-            render: (preference) => (
-              <div className="space-y-2">
-                <p className="font-medium text-white">{preference.workout_type}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge>{preference.priority}</Badge>
-                  <Badge tone={toneFromStatus(preference.is_active ? "active" : "inactive")}>
-                    {preference.is_active ? "active" : "inactive"}
-                  </Badge>
-                </div>
-              </div>
-            ),
-          },
-          {
-            header: "Recovery",
-            render: (preference) => (
-              <div className="space-y-1 text-sm text-slate-300">
-                <p>Gap {preference.minimum_gap_hours} hours</p>
-                <p className="text-xs text-slate-500">
-                  Window {preference.recovery_window_hours} hours
-                </p>
-              </div>
-            ),
-          },
-        ]}
-      />
-
-      <Table<RecoveryLog>
-        data={healthData.recoveryLogs}
-        rowKey={(log) => log.id}
-        columns={[
-          {
-            header: "Recovery",
-            render: (log) => (
-              <div className="space-y-2">
-                <p className="font-medium text-white">Score {log.recovery_score}</p>
-                <p className="text-sm text-slate-400">{log.notes ?? "No notes"}</p>
-              </div>
-            ),
-          },
-          {
-            header: "Signals",
-            render: (log) => (
-              <div className="space-y-1 text-sm text-slate-300">
-                <p>Sleep {log.sleep_hours ?? "N/A"}h</p>
-                <p className="text-xs text-slate-500">
-                  Energy {log.energy_level ?? "N/A"} · Stress {log.stress_level ?? "N/A"}
-                </p>
-              </div>
-            ),
-          },
-          {
-            header: "Logged",
-            render: (log) => (
-              <p className="text-sm text-slate-300">{formatDateTime(log.logged_at)}</p>
-            ),
-          },
-        ]}
-      />
-
-      <Table<WorkoutSession>
-        data={healthData.sessions}
-        rowKey={(session) => session.id}
-        columns={[
-          {
-            header: "Session",
-            render: (session) => (
-              <div className="space-y-2">
-                <p className="font-medium text-white">{session.title}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge>{session.workout_type}</Badge>
-                  <Badge tone={toneFromStatus(session.status)}>{session.status}</Badge>
-                </div>
-              </div>
-            ),
-          },
-          {
-            header: "Window",
-            render: (session) => (
-              <div className="space-y-1 text-sm text-slate-300">
-                <p>{formatDateTime(session.scheduled_start_at)}</p>
-                <p className="text-xs text-slate-500">
-                  {session.actual_minutes ?? session.planned_minutes} minutes · {session.intensity}
-                </p>
-              </div>
-            ),
-          },
-          {
-            header: "Actions",
-            render: (session) => (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={submitting === `session-${session.id}` || session.status === "completed"}
-                onClick={() =>
-                  void runAction(`session-${session.id}`, async () => {
-                    await healthRoutineApi.updateSession(session.id, {
-                      status: "completed",
-                      actual_minutes: session.actual_minutes ?? session.planned_minutes,
-                    });
-                  })
-                }
-              >
-                {submitting === `session-${session.id}` ? "Saving..." : "Mark Completed"}
-              </Button>
-            ),
-          },
-        ]}
-      />
-
-      <Card className="space-y-4">
-        <div>
-          <h3 className="text-lg font-medium text-white">Recommendations</h3>
-          <p className="text-sm text-slate-400">
-            Recovery-driven guidance returned by the health recommendation service.
-          </p>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          {healthData.recommendations.map((recommendation) => (
-            <div
-              key={recommendation.id}
-              className="rounded-[24px] border border-white/8 bg-white/5 p-4"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge>{recommendation.recommendation_type}</Badge>
-                <Badge tone={toneFromStatus(recommendation.status)}>
-                  {recommendation.status}
-                </Badge>
-              </div>
-              <p className="mt-3 text-sm font-medium text-white">{recommendation.title}</p>
-              {recommendation.description ? (
-                <p className="mt-2 text-sm leading-6 text-slate-400">
-                  {recommendation.description}
-                </p>
-              ) : null}
-            </div>
-          ))}
-          {!healthData.recommendations.length ? (
-            <div className="rounded-[24px] border border-dashed border-white/12 bg-white/4 p-5 text-sm text-slate-400 lg:col-span-2">
-              No health recommendations are available yet.
-            </div>
-          ) : null}
-        </div>
-      </Card>
+      </AdvancedSection>
     </div>
   );
 }

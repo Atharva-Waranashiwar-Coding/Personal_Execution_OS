@@ -8,9 +8,10 @@ import type { LifeAdminCapture, LifeAdminItem, LifeAdminRecurrence } from "@/lib
 import { useApiQuery } from "@/hooks/use-api-query";
 import { Field, FormCard, KeyValueList } from "@/components/page-elements";
 import {
+  AdvancedSection,
   Badge,
   Button,
-  Card,
+  EmptyState,
   ErrorState,
   Input,
   JsonPreview,
@@ -35,30 +36,18 @@ async function loadLifeAdminData(): Promise<LifeAdminData> {
     lifeAdminApi.listItems(),
     lifeAdminApi.listRecurrences(),
   ]);
-
   return { items, recurrences };
 }
 
 export function LifeAdminPage() {
   const { data, error, loading, reload } = useApiQuery(loadLifeAdminData);
   const [itemForm, setItemForm] = useState({
-    itemType: "bill",
-    title: "",
-    description: "",
-    status: "pending",
-    priority: "medium",
-    dueAt: "",
-    scheduledFor: "",
-    isRecurringTemplate: "false",
-    reminderRequired: "true",
-    source: "manual",
+    itemType: "bill", title: "", description: "", status: "pending", priority: "medium",
+    dueAt: "", scheduledFor: "", isRecurringTemplate: "false", reminderRequired: "true", source: "manual",
   });
   const [captureText, setCaptureText] = useState("");
   const [recurrenceForm, setRecurrenceForm] = useState({
-    itemId: "",
-    recurrenceRule: "",
-    leadTimeDays: "3",
-    nextDueAt: "",
+    itemId: "", recurrenceRule: "", leadTimeDays: "3", nextDueAt: "",
   });
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [lastCapture, setLastCapture] = useState<LifeAdminCapture | null>(null);
@@ -70,10 +59,7 @@ export function LifeAdminPage() {
 
   const derivedInsights = useMemo(() => {
     const urgentItems = items.filter((item) => {
-      if (!item.due_at || item.status === "completed") {
-        return false;
-      }
-
+      if (!item.due_at || item.status === "completed") return false;
       const dueAt = new Date(item.due_at).getTime();
       return dueAt <= now + 3 * 24 * 60 * 60 * 1000;
     }).length;
@@ -86,6 +72,18 @@ export function LifeAdminPage() {
     };
   }, [items, now]);
 
+  const urgentItems = useMemo(
+    () =>
+      items
+        .filter((item) => {
+          if (!item.due_at || item.status === "completed") return false;
+          const dueAt = new Date(item.due_at).getTime();
+          return dueAt <= now + 3 * 24 * 60 * 60 * 1000;
+        })
+        .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime()),
+    [items, now],
+  );
+
   if (loading && !data) {
     return (
       <LoadingState
@@ -97,7 +95,6 @@ export function LifeAdminPage() {
 
   const runAction = async (name: string, action: () => Promise<void>) => {
     setSubmitting(name);
-
     try {
       await action();
       await reload();
@@ -107,57 +104,93 @@ export function LifeAdminPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <SectionHeader
         eyebrow="Life Admin Agent"
         title="Life Admin"
-        description="Track admin items, capture natural language tasks, generate recurrences, escalate overdue work, and manage reminder flows."
+        description="Capture tasks in plain language and let the AI handle parsing, scheduling, and reminders."
         actions={
-          <>
-            <Button variant="secondary" onClick={() => void reload()}>
-              Refresh
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                void runAction("generate", async () => {
-                  await lifeAdminApi.generateRecurrences();
-                })
-              }
-              disabled={submitting === "generate"}
-            >
-              {submitting === "generate" ? "Generating..." : "Generate Recurrences"}
-            </Button>
-            <Button
-              onClick={() =>
-                void runAction("escalate", async () => {
-                  await lifeAdminApi.escalate();
-                })
-              }
-              disabled={submitting === "escalate"}
-            >
-              {submitting === "escalate" ? "Escalating..." : "Escalate Items"}
-            </Button>
-          </>
+          <Button variant="secondary" size="sm" onClick={() => void reload()}>
+            Refresh
+          </Button>
         }
       />
 
       {error ? <ErrorState description={error} /> : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {/* Quick Capture — stays visible, not in Advanced */}
+      <div className="overflow-hidden rounded-2xl border border-amber-400/15 bg-slate-950/60">
+        <div className="border-b border-white/6 px-5 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-400/70">
+            Quick Capture
+          </p>
+        </div>
+        <form
+          className="space-y-3 px-5 pb-4 pt-4"
+          onSubmit={(e) =>
+            void (async () => {
+              e.preventDefault();
+              await runAction("capture", async () => {
+                const capture = await lifeAdminApi.capture({ raw_text: captureText });
+                setLastCapture(capture);
+                setCaptureText("");
+              });
+            })()
+          }
+        >
+          <Textarea
+            value={captureText}
+            onChange={(e) => setCaptureText(e.target.value)}
+            placeholder="Pay the electric bill next Tuesday and remind me two days before."
+            className="min-h-[80px]"
+            required
+          />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-600">Describe any admin task in plain language</p>
+            <Button size="sm" type="submit" disabled={submitting === "capture" || !captureText.trim()}>
+              {submitting === "capture" ? "Capturing…" : "Capture"}
+            </Button>
+          </div>
+
+          {lastCapture && (
+            <div className="space-y-3 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <Badge tone={toneFromStatus(lastCapture.status)}>{lastCapture.status}</Badge>
+                <button
+                  type="button"
+                  onClick={() => setLastCapture(null)}
+                  className="text-xs text-slate-600 hover:text-slate-400"
+                >
+                  dismiss
+                </button>
+              </div>
+              <KeyValueList
+                items={[{ label: "Captured text", value: lastCapture.raw_text }]}
+              />
+              <JsonPreview
+                title="Parsed payload"
+                value={safeJsonParse(lastCapture.normalized_payload)}
+              />
+            </div>
+          )}
+        </form>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Pending Items"
           value={formatNumber(derivedInsights.pending)}
           hint="Admin work still open"
         />
         <StatCard
-          label="Urgent Window"
+          label="Urgent (≤ 3 days)"
           value={formatNumber(derivedInsights.urgent)}
-          hint="Due in the next three days"
+          hint="Due within three days"
           tone="danger"
         />
         <StatCard
-          label="Escalated Items"
+          label="Escalated"
           value={formatNumber(derivedInsights.escalated)}
           hint="Items with escalation applied"
           tone="warning"
@@ -170,17 +203,154 @@ export function LifeAdminPage() {
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+      {/* Automation actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={submitting === "generate"}
+          onClick={() =>
+            void runAction("generate", async () => {
+              await lifeAdminApi.generateRecurrences();
+            })
+          }
+        >
+          {submitting === "generate" ? "Generating…" : "Generate Recurrences"}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={submitting === "escalate"}
+          onClick={() =>
+            void runAction("escalate", async () => {
+              await lifeAdminApi.escalate();
+            })
+          }
+        >
+          {submitting === "escalate" ? "Escalating…" : "Escalate Items"}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={submitting === "schedule"}
+          onClick={() =>
+            void runAction("schedule", async () => {
+              const response = await lifeAdminApi.scheduleReminders();
+              setLastReminderMessage(`Scheduled ${response.created_count} reminders.`);
+            })
+          }
+        >
+          {submitting === "schedule" ? "Scheduling…" : "Schedule Reminders"}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={submitting === "send"}
+          onClick={() =>
+            void runAction("send", async () => {
+              const response = await lifeAdminApi.sendReminders();
+              setLastReminderMessage(`Sent ${response.sent_count} reminders.`);
+            })
+          }
+        >
+          {submitting === "send" ? "Sending…" : "Send Due Reminders"}
+        </Button>
+      </div>
+
+      {lastReminderMessage && (
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          {lastReminderMessage}
+        </div>
+      )}
+
+      {/* Urgent items */}
+      {urgentItems.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-300">Urgent — Due Soon</h3>
+          <div className="grid gap-3">
+            {urgentItems.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start justify-between gap-4 rounded-2xl border border-rose-400/15 bg-rose-500/5 px-5 py-4"
+              >
+                <div className="space-y-1.5">
+                  <p className="font-medium text-white">{item.title}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge>{item.item_type}</Badge>
+                    <Badge tone={toneFromPriority(item.priority)}>{item.priority}</Badge>
+                    {item.escalation_level > 0 && (
+                      <Badge tone="danger">Escalation {item.escalation_level}</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-rose-400">Due {formatDateTime(item.due_at)}</p>
+                </div>
+                <Badge tone={toneFromStatus(item.status)}>{item.status}</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* All items */}
+      {items.length === 0 ? (
+        <EmptyState
+          title="No life admin items yet"
+          description="Use the Quick Capture above to describe any task, bill, appointment, or chore in plain language."
+        />
+      ) : (
+        <Table<LifeAdminItem>
+          data={items}
+          rowKey={(item) => item.id}
+          columns={[
+            {
+              header: "Item",
+              render: (item) => (
+                <div className="space-y-1.5">
+                  <p className="font-medium text-white">{item.title}</p>
+                  {item.description && (
+                    <p className="text-xs text-slate-500">{item.description}</p>
+                  )}
+                </div>
+              ),
+            },
+            {
+              header: "Type & Priority",
+              render: (item) => (
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge>{item.item_type}</Badge>
+                  <Badge tone={toneFromPriority(item.priority)}>{item.priority}</Badge>
+                  {item.escalation_level > 0 && (
+                    <Badge tone="danger">Esc {item.escalation_level}</Badge>
+                  )}
+                </div>
+              ),
+            },
+            {
+              header: "Status & Due",
+              render: (item) => (
+                <div className="space-y-1">
+                  <Badge tone={toneFromStatus(item.status)}>{item.status}</Badge>
+                  <p className="text-xs text-slate-500">Due {formatDateTime(item.due_at)}</p>
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
+
+      {/* Advanced — manual CRUD */}
+      <AdvancedSection title="Advanced — Manual Controls">
+        {/* Create item manually */}
         <FormCard
           badge="Manual entry"
           title="Create life admin item"
-          description="Persist structured items directly when you already know the type and date."
+          description="Directly create a structured item when you already know the type and date."
         >
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("item", async () => {
                   await lifeAdminApi.createItem({
                     item_type: itemForm.itemType,
@@ -195,16 +365,8 @@ export function LifeAdminPage() {
                     source: itemForm.source,
                   });
                   setItemForm({
-                    itemType: "bill",
-                    title: "",
-                    description: "",
-                    status: "pending",
-                    priority: "medium",
-                    dueAt: "",
-                    scheduledFor: "",
-                    isRecurringTemplate: "false",
-                    reminderRequired: "true",
-                    source: "manual",
+                    itemType: "bill", title: "", description: "", status: "pending", priority: "medium",
+                    dueAt: "", scheduledFor: "", isRecurringTemplate: "false", reminderRequired: "true", source: "manual",
                   });
                 });
               })()
@@ -212,176 +374,51 @@ export function LifeAdminPage() {
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Item type">
-                <Select
-                  value={itemForm.itemType}
-                  onChange={(event) =>
-                    setItemForm({ ...itemForm, itemType: event.target.value })
-                  }
-                >
-                  {["bill", "errand", "renewal", "appointment", "household"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Source">
-                <Input
-                  value={itemForm.source}
-                  onChange={(event) =>
-                    setItemForm({ ...itemForm, source: event.target.value })
-                  }
-                />
-              </Field>
-            </div>
-            <Field label="Title">
-              <Input
-                value={itemForm.title}
-                onChange={(event) =>
-                  setItemForm({ ...itemForm, title: event.target.value })
-                }
-                required
-              />
-            </Field>
-            <Field label="Description">
-              <Textarea
-                value={itemForm.description}
-                onChange={(event) =>
-                  setItemForm({ ...itemForm, description: event.target.value })
-                }
-              />
-            </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Status">
-                <Select
-                  value={itemForm.status}
-                  onChange={(event) =>
-                    setItemForm({ ...itemForm, status: event.target.value })
-                  }
-                >
-                  {["pending", "scheduled", "completed", "cancelled"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
+                <Select value={itemForm.itemType} onChange={(e) => setItemForm({ ...itemForm, itemType: e.target.value })}>
+                  {["bill", "errand", "renewal", "appointment", "household"].map((o) => (
+                    <option key={o} value={o}>{o}</option>
                   ))}
                 </Select>
               </Field>
               <Field label="Priority">
-                <Select
-                  value={itemForm.priority}
-                  onChange={(event) =>
-                    setItemForm({ ...itemForm, priority: event.target.value })
-                  }
-                >
-                  {["low", "medium", "high"].map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                <Select value={itemForm.priority} onChange={(e) => setItemForm({ ...itemForm, priority: e.target.value })}>
+                  {["low", "medium", "high"].map((o) => <option key={o} value={o}>{o}</option>)}
                 </Select>
               </Field>
+            </div>
+            <Field label="Title">
+              <Input value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} required />
+            </Field>
+            <Field label="Description">
+              <Textarea value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Due at">
-                <Input
-                  type="datetime-local"
-                  value={itemForm.dueAt}
-                  onChange={(event) =>
-                    setItemForm({ ...itemForm, dueAt: event.target.value })
-                  }
-                />
+                <Input type="datetime-local" value={itemForm.dueAt} onChange={(e) => setItemForm({ ...itemForm, dueAt: e.target.value })} />
               </Field>
               <Field label="Scheduled for">
-                <Input
-                  type="datetime-local"
-                  value={itemForm.scheduledFor}
-                  onChange={(event) =>
-                    setItemForm({ ...itemForm, scheduledFor: event.target.value })
-                  }
-                />
+                <Input type="datetime-local" value={itemForm.scheduledFor} onChange={(e) => setItemForm({ ...itemForm, scheduledFor: e.target.value })} />
               </Field>
               <Field label="Recurring template">
-                <Select
-                  value={itemForm.isRecurringTemplate}
-                  onChange={(event) =>
-                    setItemForm({
-                      ...itemForm,
-                      isRecurringTemplate: event.target.value,
-                    })
-                  }
-                >
+                <Select value={itemForm.isRecurringTemplate} onChange={(e) => setItemForm({ ...itemForm, isRecurringTemplate: e.target.value })}>
                   <option value="false">No</option>
                   <option value="true">Yes</option>
                 </Select>
               </Field>
               <Field label="Reminder required">
-                <Select
-                  value={itemForm.reminderRequired}
-                  onChange={(event) =>
-                    setItemForm({
-                      ...itemForm,
-                      reminderRequired: event.target.value,
-                    })
-                  }
-                >
+                <Select value={itemForm.reminderRequired} onChange={(e) => setItemForm({ ...itemForm, reminderRequired: e.target.value })}>
                   <option value="true">Yes</option>
                   <option value="false">No</option>
                 </Select>
               </Field>
             </div>
             <Button type="submit" disabled={submitting === "item"}>
-              {submitting === "item" ? "Saving..." : "Create Item"}
+              {submitting === "item" ? "Saving…" : "Create Item"}
             </Button>
           </form>
         </FormCard>
 
-        <FormCard
-          badge="Natural language"
-          title="Capture admin task"
-          description="Send raw language to the capture route and store the parsed payload for review."
-        >
-          <form
-            className="space-y-4"
-            onSubmit={(event) =>
-              void (async () => {
-                event.preventDefault();
-                await runAction("capture", async () => {
-                  const capture = await lifeAdminApi.capture({ raw_text: captureText });
-                  setLastCapture(capture);
-                  setCaptureText("");
-                });
-              })()
-            }
-          >
-            <Field label="Raw text">
-              <Textarea
-                value={captureText}
-                onChange={(event) => setCaptureText(event.target.value)}
-                placeholder="Pay the electric bill next Tuesday and remind me two days before."
-                required
-              />
-            </Field>
-            <Button type="submit" disabled={submitting === "capture"}>
-              {submitting === "capture" ? "Capturing..." : "Capture Item"}
-            </Button>
-          </form>
-
-          {lastCapture ? (
-            <div className="space-y-4">
-              <KeyValueList
-                items={[
-                  { label: "Capture status", value: lastCapture.status },
-                  { label: "Raw text", value: lastCapture.raw_text },
-                ]}
-              />
-              <JsonPreview
-                title="Normalized capture payload"
-                value={safeJsonParse(lastCapture.normalized_payload)}
-              />
-            </div>
-          ) : null}
-        </FormCard>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        {/* Create recurrence rule */}
         <FormCard
           badge="Recurrence"
           title="Create recurrence rule"
@@ -389,9 +426,9 @@ export function LifeAdminPage() {
         >
           <form
             className="space-y-4"
-            onSubmit={(event) =>
+            onSubmit={(e) =>
               void (async () => {
-                event.preventDefault();
+                e.preventDefault();
                 await runAction("recurrence", async () => {
                   await lifeAdminApi.createRecurrence({
                     item_id: Number(recurrenceForm.itemId),
@@ -399,206 +436,75 @@ export function LifeAdminPage() {
                     lead_time_days: Number(recurrenceForm.leadTimeDays),
                     next_due_at: toIsoString(recurrenceForm.nextDueAt),
                   });
-                  setRecurrenceForm({
-                    itemId: "",
-                    recurrenceRule: "",
-                    leadTimeDays: "3",
-                    nextDueAt: "",
-                  });
+                  setRecurrenceForm({ itemId: "", recurrenceRule: "", leadTimeDays: "3", nextDueAt: "" });
                 });
               })()
             }
           >
             <Field label="Item">
-              <Select
-                value={recurrenceForm.itemId}
-                onChange={(event) =>
-                  setRecurrenceForm({ ...recurrenceForm, itemId: event.target.value })
-                }
-                required
-              >
+              <Select value={recurrenceForm.itemId} onChange={(e) => setRecurrenceForm({ ...recurrenceForm, itemId: e.target.value })} required>
                 <option value="">Select item</option>
                 {items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
+                  <option key={item.id} value={item.id}>{item.title}</option>
                 ))}
               </Select>
             </Field>
             <Field label="Recurrence rule">
               <Input
                 value={recurrenceForm.recurrenceRule}
-                onChange={(event) =>
-                  setRecurrenceForm({
-                    ...recurrenceForm,
-                    recurrenceRule: event.target.value,
-                  })
-                }
+                onChange={(e) => setRecurrenceForm({ ...recurrenceForm, recurrenceRule: e.target.value })}
                 placeholder="FREQ=MONTHLY;BYDAY=1MO"
                 required
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Lead time days">
-                <Input
-                  type="number"
-                  value={recurrenceForm.leadTimeDays}
-                  onChange={(event) =>
-                    setRecurrenceForm({
-                      ...recurrenceForm,
-                      leadTimeDays: event.target.value,
-                    })
-                  }
-                />
+                <Input type="number" value={recurrenceForm.leadTimeDays} onChange={(e) => setRecurrenceForm({ ...recurrenceForm, leadTimeDays: e.target.value })} />
               </Field>
               <Field label="Next due at">
-                <Input
-                  type="datetime-local"
-                  value={recurrenceForm.nextDueAt}
-                  onChange={(event) =>
-                    setRecurrenceForm({
-                      ...recurrenceForm,
-                      nextDueAt: event.target.value,
-                    })
-                  }
-                />
+                <Input type="datetime-local" value={recurrenceForm.nextDueAt} onChange={(e) => setRecurrenceForm({ ...recurrenceForm, nextDueAt: e.target.value })} />
               </Field>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Button type="submit" disabled={submitting === "recurrence"}>
-                {submitting === "recurrence" ? "Saving..." : "Create Recurrence"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={submitting === "schedule"}
-                onClick={() =>
-                  void runAction("schedule", async () => {
-                    const response = await lifeAdminApi.scheduleReminders();
-                    setLastReminderMessage(`Scheduled ${response.created_count} reminders.`);
-                  })
-                }
-              >
-                {submitting === "schedule" ? "Scheduling..." : "Schedule Reminders"}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={submitting === "send"}
-                onClick={() =>
-                  void runAction("send", async () => {
-                    const response = await lifeAdminApi.sendReminders();
-                    setLastReminderMessage(`Sent ${response.sent_count} reminders.`);
-                  })
-                }
-              >
-                {submitting === "send" ? "Sending..." : "Send Due Reminders"}
-              </Button>
-            </div>
-            {lastReminderMessage ? (
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
-                {lastReminderMessage}
-              </div>
-            ) : null}
+            <Button type="submit" disabled={submitting === "recurrence"}>
+              {submitting === "recurrence" ? "Saving…" : "Create Recurrence"}
+            </Button>
           </form>
         </FormCard>
 
-        {
-          // TODO(frontend): Replace this derived placeholder when the backend /life-admin/insights route is enabled.
-        }
-        <Card className="space-y-4 border-dashed border-white/12 bg-white/4">
-          <div>
-            <h3 className="text-lg font-medium text-white">Insights Placeholder</h3>
-            <p className="text-sm leading-6 text-slate-400">
-              The backend currently does not expose `/life-admin/insights`. This panel stays
-              intentionally placeholder-only until that route is implemented.
-            </p>
-          </div>
-          <KeyValueList
-            items={[
-              { label: "Client-derived pending count", value: formatNumber(derivedInsights.pending) },
-              { label: "Client-derived urgent count", value: formatNumber(derivedInsights.urgent) },
-              { label: "Client-derived escalated count", value: formatNumber(derivedInsights.escalated) },
-              { label: "Tracked recurrences", value: formatNumber(recurrences.length) },
+        {/* Recurrences table */}
+        {recurrences.length > 0 && (
+          <Table<LifeAdminRecurrence>
+            data={recurrences}
+            rowKey={(r) => r.id}
+            columns={[
+              {
+                header: "Recurrence",
+                render: (r) => (
+                  <div className="space-y-1">
+                    <p className="font-medium text-white">{r.recurrence_rule}</p>
+                    <p className="text-xs text-slate-500">Item #{r.item_id}</p>
+                  </div>
+                ),
+              },
+              {
+                header: "Lead Time",
+                render: (r) => <p className="text-sm text-slate-300">{r.lead_time_days} days</p>,
+              },
+              {
+                header: "Next Due",
+                render: (r) => (
+                  <div className="space-y-0.5">
+                    <p className="text-sm text-slate-300">{formatDateTime(r.next_due_at)}</p>
+                    <p className="text-xs text-slate-500">
+                      Last gen {formatDateTime(r.last_generated_at)}
+                    </p>
+                  </div>
+                ),
+              },
             ]}
           />
-        </Card>
-      </div>
-
-      <Table<LifeAdminItem>
-        data={items}
-        rowKey={(item) => item.id}
-        columns={[
-          {
-            header: "Item",
-            render: (item) => (
-              <div className="space-y-2">
-                <p className="font-medium text-white">{item.title}</p>
-                {item.description ? (
-                  <p className="text-sm leading-6 text-slate-400">{item.description}</p>
-                ) : null}
-              </div>
-            ),
-          },
-          {
-            header: "Meta",
-            render: (item) => (
-              <div className="flex flex-wrap gap-2">
-                <Badge>{item.item_type}</Badge>
-                <Badge tone={toneFromPriority(item.priority)}>{item.priority}</Badge>
-                <Badge tone={toneFromStatus(item.status)}>{item.status}</Badge>
-                {item.escalation_level > 0 ? (
-                  <Badge tone="danger">Escalation {item.escalation_level}</Badge>
-                ) : null}
-              </div>
-            ),
-          },
-          {
-            header: "Schedule",
-            render: (item) => (
-              <div className="space-y-1 text-sm text-slate-300">
-                <p>Due {formatDateTime(item.due_at)}</p>
-                <p className="text-xs text-slate-500">
-                  Scheduled {formatDateTime(item.scheduled_for)}
-                </p>
-              </div>
-            ),
-          },
-        ]}
-      />
-
-      <Table<LifeAdminRecurrence>
-        data={recurrences}
-        rowKey={(recurrence) => recurrence.id}
-        columns={[
-          {
-            header: "Recurrence",
-            render: (recurrence) => (
-              <div className="space-y-2">
-                <p className="font-medium text-white">{recurrence.recurrence_rule}</p>
-                <p className="text-xs text-slate-500">Item #{recurrence.item_id}</p>
-              </div>
-            ),
-          },
-          {
-            header: "Lead Time",
-            render: (recurrence) => (
-              <p className="text-sm text-slate-300">{recurrence.lead_time_days} days</p>
-            ),
-          },
-          {
-            header: "Next Due",
-            render: (recurrence) => (
-              <div className="space-y-1 text-sm text-slate-300">
-                <p>{formatDateTime(recurrence.next_due_at)}</p>
-                <p className="text-xs text-slate-500">
-                  Last generated {formatDateTime(recurrence.last_generated_at)}
-                </p>
-              </div>
-            ),
-          },
-        ]}
-      />
+        )}
+      </AdvancedSection>
     </div>
   );
 }
